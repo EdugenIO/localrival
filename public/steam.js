@@ -1,20 +1,26 @@
 (() => {
-  const panel=document.createElement('section');panel.className='steam-panel';panel.setAttribute('aria-label','Connected Steam account');
+  const panel=document.createElement('details');panel.className='steam-panel';panel.setAttribute('aria-label','Connected Steam account');
   document.querySelector('.gamebar').before(panel);
-  const top=document.getElementById('joinTop');top.textContent='◉ Connect Steam';top.onclick=()=>{panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('a,button')?.focus()};
+  const summary=document.createElement('summary');summary.className='stats-summary';panel.append(summary);
+  const body=document.createElement('div');body.className='stats-content';panel.append(body);
+  const top=document.getElementById('joinTop');top.textContent='◉ Connect Steam';top.onclick=()=>{panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('a,button')?.focus()};
+  document.getElementById('profileNav').onclick=top.onclick;
   const nav=document.createElement('button');nav.textContent='◉   Steam & live data';nav.onclick=top.onclick;document.querySelector('nav').append(nav);
   let account=null,busy=false,message='',error=false,matchFilter='all',refreshControl=null,browserControl=null,browserRetryAt=0,heroNames={};
   const query=new URLSearchParams(location.search),status=query.get('steam');
   const statuses={linked:'Steam verified. Fetching your available game data…',expired:'This Steam connection expired. Please try again.',cancelled:'Steam connection cancelled. You can reconnect whenever you are ready.',already_linked:'This Steam account is already connected to another Local Rival user.',failed:'Steam could not verify this connection. Please try again.',failed_assertion:'The Steam response did not pass validation. Please reconnect.',failed_steam:'Steam confirmation failed. Please try again in a moment.',failed_storage:'Steam verification completed, but the account could not be saved. Please retry.'};
-  if(status){message=statuses[status]||'';error=status!=='linked';history.replaceState(null,'',location.pathname)}
-  function el(tag,text,className,parent=panel){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;parent.append(node);return node}
-  function button(text,action,parent=panel){const b=el('button',text,'outline',parent);b.onclick=action;b.disabled=busy;return b}
+  if(status){panel.open=true;message=statuses[status]||'';error=status!=='linked';history.replaceState(null,'',location.pathname)}
+  function el(tag,text,className,parent=body){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;parent.append(node);return node}
+  function button(text,action,parent=body){const b=el('button',text,'outline',parent);b.onclick=action;b.disabled=busy;return b}
   function updateRefreshControl(){if(refreshControl){const seconds=Math.max(0,Math.ceil(((account?.refreshAfter||0)-Date.now())/1000));refreshControl.disabled=busy||seconds>0;refreshControl.textContent=busy?'Refreshing…':seconds?'Refresh in '+Math.floor(seconds/60)+'m '+seconds%60+'s':'Refresh game data'}if(browserControl){const seconds=Math.max(0,Math.ceil((Math.max(browserRetryAt,account?.dota?.browserRefreshAfter||0)-Date.now())/1000));browserControl.disabled=busy||seconds>0;browserControl.textContent=busy?'Syncing…':seconds?'Profile sync in '+seconds+'s':'Sync OpenDota profile'}}
   const heroName=id=>heroNames[id]||'Hero '+(id||'unknown');
   const duration=seconds=>typeof seconds==='number'?Math.floor(Math.round(seconds)/60)+':'+String(Math.round(seconds)%60).padStart(2,'0'):'—';
   function draw(){
-    panel.replaceChildren();
-    top.textContent=account?'◉ Steam connected':'◉ Connect Steam';
+    body.replaceChildren();
+    summary.replaceChildren();
+    const identity=el('span',undefined,'stats-identity',summary);el('span','MY PLAYER STATS','eyebrow',identity);el('strong',account?.dota?.name||(account?'Steam connected':'Connect your Steam account'),'',identity);
+    const preview=el('span',undefined,'stats-preview',summary);const performance=account?.dota?.performance;if(performance?.eligibleMatches)el('span',performance.points+' points · '+performance.eligibleMatches+' recent matches','',preview);el('span','Stats & account','stats-prompt',preview);el('span','⌄','stats-chevron',summary);
+    top.textContent=account?'◉ My stats ⌄':'◉ Connect Steam';
     const head=el('div',undefined,'steam-head');const intro=el('div',undefined,'',head);el('div','PRIVATE PILOT · REAL ACCOUNTS','eyebrow',intro);el('h2',account?'Your Steam account is connected.':'Bring your game to your home ground.','',intro);
     el('p',account?'Steam account verified. Your match performance is shown separately from the sample local leaderboard.':'Connect an existing Steam account to collect matches across Turbo, normal and other available modes.','',intro);
     if(!account){const a=el('a',undefined,'steam-signin',head);a.href='/api/steam/start';a.target='_top';const img=document.createElement('img');img.src='https://shared.fastly.steamstatic.com/community_assets/images/steamworks_docs/english/sits_large_border.png';img.alt='Sign in through Steam';img.width=180;img.height=35;a.append(img);el('p','This app remains private. No Steam password is stored by Local Rival.','steam-note');}
