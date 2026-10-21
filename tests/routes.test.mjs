@@ -11,7 +11,7 @@ const root=path.resolve(import.meta.dirname,'..');
 async function setup(){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(path.join(root,'drizzle/0000_flashy_alex_power.sql'),'utf8'));
   const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,rateLimited:false,calls:0};
-  const db={prepare(text){let args=[];return {bind(...values){args=values;return this},async first(){return sql.prepare(text).get(...args)||null},async run(){return sql.prepare(text).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}};
+  const db={prepare(text){let args=[];return {bind(...values){args=values;return this},async all(){return {results:sql.prepare(text).all(...args)}},async first(){return sql.prepare(text).get(...args)||null},async run(){return sql.prepare(text).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}};
   const context=vm.createContext({console,URL,URLSearchParams,TextEncoder,TextDecoder,Uint8Array,crypto,Request,Response,AbortSignal,Date,process:{env:{NODE_ENV:'production'}},fetch:async(url,options)=>{
     session.calls++;const target=String(url);
     if(target===STEAM_ENDPOINT){assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('is_valid:'+session.steamValid+'\n')}
@@ -81,3 +81,17 @@ test('browser profile import limits input size before parsing',async()=>{
 });
 
 
+
+test('live ladder requires opt-in, recalculates scores, hides account IDs and isolates membership',async()=>{
+ const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));
+ h.sql.prepare('UPDATE steam_links SET dota_data=? WHERE user_id=?').run(JSON.stringify({matches:[{won:true,abandoned:false},{won:false,abandoned:false},{won:true,abandoned:true}],performance:{points:99999},syncMethod:'browser',fetchedAt:123}),'alice');
+ const route=await h.route('leaderboard');const req=body=>new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ assert.equal((await(await route.GET()).json()).players.length,0);
+ assert.equal((await route.POST(req({alias:'Alice',postcode:'9999'}))).status,400);
+ assert.equal((await route.POST(req({alias:'Alice',postcode:'6000'}))).status,200);
+ let data=await(await route.GET()).json();assert.equal(data.players.length,1);assert.equal(data.players[0].points,4);assert.equal(data.players[0].unverified,true);assert.equal(data.membership.postcode,'6000');assert.equal(JSON.stringify(data).includes('7656119'),false);assert.equal(JSON.stringify(data).includes('user_id'),false);
+ h.session.user={userId:'bob'};assert.equal((await route.POST(req({alias:'Bob',postcode:'6000'}))).status,409);await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await(await route.GET()).json()).players.length,1);
+ h.session.user={userId:'alice'};assert.equal((await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:'https://evil.example'}}))).status,403);
+ await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await(await route.GET()).json()).players.length,0);
+ h.session.user=null;assert.equal((await route.GET()).status,401);assert.equal((await route.POST(req({alias:'A',postcode:'6000'}))).status,401);
+});
