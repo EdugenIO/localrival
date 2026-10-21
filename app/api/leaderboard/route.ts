@@ -6,19 +6,19 @@ const postcodes=postcodeData as Record<string,string[][]>;
 const place=(code:string,locality?:string)=>postcodes[code]?.find(p=>p[0]===locality)||postcodes[code]?.[0];
 async function prepare(){await database().prepare('CREATE TABLE IF NOT EXISTS ladder_members (user_id TEXT PRIMARY KEY, steam_id TEXT NOT NULL UNIQUE, alias TEXT NOT NULL, postcode TEXT NOT NULL, joined_at INTEGER NOT NULL)').run();await database().prepare('CREATE TABLE IF NOT EXISTS ladder_places (user_id TEXT PRIMARY KEY, locality TEXT NOT NULL)').run()}
 export async function GET(){
- const user=await currentUser();if(!user)return json({error:'Sign in to view the local ladder.'},401);
+ const user=await currentUser();
  await prepare();
  const records=await database().prepare('SELECT m.*,s.dota_data,p.locality FROM ladder_members m JOIN steam_links s ON s.user_id=m.user_id AND s.steam_id=m.steam_id LEFT JOIN ladder_places p ON p.user_id=m.user_id').all();
  const players=[];let membership=null;
  for(const row of records.results as any[]){const location=place(row.postcode,row.locality);if(!location)continue;
  let data;try{data=JSON.parse(row.dota_data||'null')}catch{continue}
  const name=typeof data?.name==='string'&&data.name.trim()?data.name.trim().slice(0,80):row.alias;
- if(row.user_id===user.userId)membership={alias:name,postcode:row.postcode,locality:location[0]};
+ if(row.user_id===user?.userId)membership={alias:name,postcode:row.postcode,locality:location[0]};
  if(!Array.isArray(data?.matches))continue;
  const matches=data.matches.slice(0,50);const performance=matchPerformance(matches);if(!performance.eligibleMatches)continue;
- players.push({name,postcode:row.postcode,location,points:performance.points,basePoints:performance.basePoints,performancePoints:performance.performancePoints,win:Math.round(performance.wins/performance.eligibleMatches*100),matches:performance.eligibleMatches,form:matches.slice(0,5).map((m:any)=>m.abandoned?'A':m.won?'W':'L').join(''),fetchedAt:data.fetchedAt||null,provisional:performance.provisional,isYou:row.user_id===user.userId});
+ players.push({name,postcode:row.postcode,location,points:performance.points,basePoints:performance.basePoints,performancePoints:performance.performancePoints,win:Math.round(performance.wins/performance.eligibleMatches*100),matches:performance.eligibleMatches,form:matches.slice(0,5).map((m:any)=>m.abandoned?'A':m.won?'W':'L').join(''),fetchedAt:data.fetchedAt||null,provisional:performance.provisional,isYou:row.user_id===user?.userId});
  }
- const ownLink=await getLink(user.userId);let gamerName=null;try{gamerName=JSON.parse(ownLink?.dota_data||'null')?.name||null}catch{}
+ const ownLink=user?await getLink(user.userId):null;let gamerName=null;try{gamerName=JSON.parse(ownLink?.dota_data||'null')?.name||null}catch{}
  return json({players,membership,gamerName,updatedAt:Date.now()});
 }
 export async function POST(request:Request){

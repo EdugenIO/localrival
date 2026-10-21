@@ -1,0 +1,6 @@
+import {headers} from 'next/headers';
+import {database,json,sameOrigin} from '../../../../lib/server';
+import {SESSION_COOKIE,cookieValue,sessionTable} from '../../../../lib/steam-session';
+import {hashState} from '../../../../lib/steam-openid.mjs';
+export const dynamic='force-dynamic';
+export async function POST(request:Request){if(!sameOrigin(request))return json({error:'Invalid request origin'},403);const token=cookieValue((await headers()).get('cookie')||'',SESSION_COOKIE);if(token){await sessionTable(database());await database().prepare('DELETE FROM player_sessions WHERE token_hash=?').bind(await hashState(token)).run()}return new Response(null,{status:204,headers:{'Cache-Control':'no-store','Set-Cookie':`${SESSION_COOKIE}=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax`}})}

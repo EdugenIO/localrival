@@ -22,10 +22,10 @@
     const preview=el('span',undefined,'stats-preview',summary);const performance=account?.dota?.performance;if(performance?.eligibleMatches)el('span',performance.points+' points · '+performance.eligibleMatches+' recent matches','',preview);el('span','Stats & account','stats-prompt',preview);el('span','⌄','stats-chevron',summary);
     top.textContent=account?'◉ My stats ⌄':'◉ Connect Steam';
     const head=el('div',undefined,'steam-head');const intro=el('div',undefined,'',head);el('div','PRIVATE PILOT · REAL ACCOUNTS','eyebrow',intro);el('h2',account?'Your Steam account is connected.':'Bring your game to your home ground.','',intro);
-    el('p',account?'Steam account verified. Join your local ladder to share your match score.':'Connect an existing Steam account to collect matches across Turbo, normal and other available modes.','',intro);
-    if(!account){const a=el('a',undefined,'steam-signin',head);a.href='/api/steam/start';a.target='_top';const img=document.createElement('img');img.src='https://shared.fastly.steamstatic.com/community_assets/images/steamworks_docs/english/sits_large_border.png';img.alt='Sign in through Steam';img.width=180;img.height=35;a.append(img);el('p','This app remains private. No Steam password is stored by Local Rival.','steam-note');}
+    el('p',account?'Steam account verified. Join your local ladder to share your match score.':'Sign in with your Steam account to collect matches across Turbo, normal and other available modes.','',intro);
+    if(!account){const a=el('a',undefined,'steam-signin',head);a.href='/api/steam/start';a.target='_top';const img=document.createElement('img');img.src='https://shared.fastly.steamstatic.com/community_assets/images/steamworks_docs/english/sits_large_border.png';img.alt='Sign in through Steam';img.width=180;img.height=35;a.append(img);el('p','Sign in with Steam to save your account. This device stays signed in for up to 30 days. Local Rival never sees your Steam password.','steam-note');}
     else {
-      const actions=el('div',undefined,'steam-actions',head);refreshControl=button(busy?'Refreshing…':'Refresh game data',sync,actions);button('Disconnect',disconnect,actions);
+      const actions=el('div',undefined,'steam-actions',head);refreshControl=button(busy?'Refreshing…':'Refresh game data',sync,actions);button('Sign out',signOut,actions);button('Disconnect & delete data',disconnect,actions);
       const id=el('p','Steam ID '+account.steamId+' · Match performance pilot','steam-note');
       const link=el('a','View on Steam ↗','',id);link.href='https://steamcommunity.com/profiles/'+account.steamId;link.target='_blank';link.rel='noopener noreferrer';
       const grid=el('div',undefined,'live-grid');
@@ -67,6 +67,7 @@
       const r=await fetch('/api/dota/browser-sync',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({steamId:account.steamId,accountId:id,profile,matches,totals})});const data=await r.json();if(!r.ok){if(data.account)account=data.account;throw new Error(data.error||'Could not save your profile.')}account=data.account;message='OpenDota profile synced: '+account.dota.matches.length+' matches available. Turbo and normal matches are included.';
     }catch(e){message=e.message;error=true}finally{busy=false;draw();window.dispatchEvent(new Event("localrival-sync"))}
   }
+  async function signOut(){if(busy)return;await api('/api/session/logout','POST');location.href='/signout-with-chatgpt?return_to=%2Fleaderboard';}
   async function disconnect(){if(busy)return;if(!window.confirm('Disconnect Steam and remove your stored game data from Local Rival?'))return;busy=true;draw();try{await api('/api/steam/account','DELETE');account=null;message='Steam disconnected. Stored game data has been removed.';error=false}catch(e){message=e.message;error=true}finally{busy=false;draw();window.dispatchEvent(new Event("localrival-sync"))}}
   setInterval(updateRefreshControl,1000);
   draw();Promise.all([api('/api/steam/account'),fetch('/dota-hero-names.json').then(r=>r.json()).catch(()=>({}))]).then(([data,names])=>{account=data.account;heroNames=names;draw();if(status==='linked'&&account)sync()}).catch(e=>{message=e.message;error=true;draw()});

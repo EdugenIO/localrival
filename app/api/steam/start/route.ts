@@ -3,12 +3,13 @@ import { createState, hashState, SITE_ORIGIN, STATE_COOKIE, steamLoginUrl } from
 export const dynamic='force-dynamic';
 export async function GET() {
   const user=await currentUser();
-  if(!user) return Response.redirect(SITE_ORIGIN+'/signin-with-chatgpt?return_to=%2Fapi%2Fsteam%2Fstart',303);
+
   const state=createState();
+  const attemptUser=user?.userId||'pending:'+await hashState(state);
   const returnTo=SITE_ORIGIN+'/api/steam/return?state='+state;
   await database().batch([
     database().prepare('DELETE FROM steam_attempts WHERE expires_at < ?').bind(Date.now()),
-    database().prepare('INSERT INTO steam_attempts (state_hash,user_id,return_to,expires_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,return_to=excluded.return_to,expires_at=excluded.expires_at').bind(await hashState(state),user.userId,returnTo,Date.now()+600000),
+    database().prepare('INSERT INTO steam_attempts (state_hash,user_id,return_to,expires_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET state_hash=excluded.state_hash,return_to=excluded.return_to,expires_at=excluded.expires_at').bind(await hashState(state),attemptUser,returnTo,Date.now()+600000),
   ]);
   return new Response(null,{status:303,headers:{Location:steamLoginUrl(returnTo),'Cache-Control':'no-store','Set-Cookie':`${STATE_COOKIE}=${state}; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax`}});
 }
