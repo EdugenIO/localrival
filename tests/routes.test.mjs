@@ -10,12 +10,12 @@ import { SITE_ORIGIN, OPENID_NS, STEAM_ENDPOINT, STATE_COOKIE } from '../lib/ste
 const root=path.resolve(import.meta.dirname,'..');
 async function setup(){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(path.join(root,'drizzle/0000_flashy_alex_power.sql'),'utf8'));
-  const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,calls:0};
+  const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,rateLimited:false,calls:0};
   const db={prepare(text){let args=[];return {bind(...values){args=values;return this},async first(){return sql.prepare(text).get(...args)||null},async run(){return sql.prepare(text).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}};
   const context=vm.createContext({console,URL,URLSearchParams,TextEncoder,Uint8Array,crypto,Request,Response,AbortSignal,Date,process:{env:{NODE_ENV:'production'}},fetch:async(url,options)=>{
     session.calls++;const target=String(url);
     if(target===STEAM_ENDPOINT){assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('is_valid:'+session.steamValid+'\n')}
-    if(target.includes('opendota')){if(session.failDota)return new Response('',{status:503});return Response.json(target.includes('/matches?')?[{match_id:1,player_slot:0,radiant_win:true,kills:1,deaths:0,assists:2}]:{profile:{personaname:'Alice'},rank_tier:43})}
+    if(target.includes('opendota')){if(session.rateLimited)return new Response('',{status:429,headers:{'Retry-After':'300'}});if(session.failDota)return new Response('',{status:503});return Response.json(target.includes('/matches?')?[{match_id:1,player_slot:0,radiant_win:true,kills:1,deaths:0,assists:2}]:{profile:{personaname:'Alice'},rank_tier:43})}
     throw new Error('Unexpected external request');
   }});
   const modules=new Map();
@@ -50,4 +50,13 @@ test('failed Steam verification never creates an account link',async()=>{const h
 test('one Steam account cannot be linked to two Site users',async()=>{const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));h.session.user={userId:'bob',email:'bob@example.test'};const b=await start(h);assert.match((await ret.GET(callback(b.location,b.state))).headers.get('location'),/already_linked/);assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM steam_links').get().n,1)});
 test('account reads and deletes are isolated; anonymous and cross-origin access fail',async()=>{const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));const account=await h.route('steam/account');h.session.user={userId:'bob',email:'bob@example.test'};assert.equal((await(await account.GET()).json()).account,null);await account.DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM steam_links').get().n,1);h.session.user={userId:'alice',email:'alice@example.test'};assert.equal((await account.DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:'https://evil.example'}}))).status,403);h.session.user=null;assert.equal((await account.GET()).status,401)});
 test('refresh persists provider results, enforces cooldown and preserves old data on an outage',async()=>{const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));const sync=await h.route('games/sync');const req=()=>new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}});let data=await(await sync.POST(req())).json();assert.equal(data.account.dota.name,'Alice');assert.equal(data.account.cs.status,'not_configured');const fetchedAt=data.account.dota.fetchedAt;assert.equal((await sync.POST(req())).status,429);h.sql.prepare('UPDATE steam_links SET refresh_after=0').run();h.session.failDota=true;data=await(await sync.POST(req())).json();assert.equal(data.account.dota.fetchedAt,fetchedAt);assert.equal(data.errors.length,1);const account=await h.route('steam/account');await account.DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM steam_links').get().n,0);assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM steam_attempts').get().n,0)});
+test('provider backoff persists and repeated refreshes do not call the provider',async()=>{
+  const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));h.session.rateLimited=true;
+  const sync=await h.route('games/sync');const request=()=>new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}});
+  const before=Date.now();const data=await(await sync.POST(request())).json();
+  assert.equal(data.providerStatus.dota.code,'rate_limited');assert.equal(data.account.dota.syncIssue.httpStatus,429);
+  assert.ok(data.account.refreshAfter>=before+300000);const calls=h.session.calls;
+  assert.equal((await sync.POST(request())).status,429);assert.equal(h.session.calls,calls);
+  assert.equal(h.sql.prepare('SELECT refresh_after FROM steam_links').get().refresh_after,data.account.refreshAfter);
+});
 

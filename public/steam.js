@@ -3,12 +3,13 @@
   document.querySelector('.gamebar').before(panel);
   const top=document.getElementById('joinTop');top.textContent='◉ Connect Steam';top.onclick=()=>{panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('a,button')?.focus()};
   const nav=document.createElement('button');nav.textContent='◉   Steam & live data';nav.onclick=top.onclick;document.querySelector('nav').append(nav);
-  let account=null,busy=false,message='',error=false,matchFilter='all';
+  let account=null,busy=false,message='',error=false,matchFilter='all',refreshControl=null;
   const query=new URLSearchParams(location.search),status=query.get('steam');
   const statuses={linked:'Steam verified. Fetching your available game data…',expired:'This Steam connection expired. Please try again.',cancelled:'Steam connection cancelled. You can reconnect whenever you are ready.',already_linked:'This Steam account is already connected to another Local Rival user.',failed:'Steam could not verify this connection. Please try again.',failed_assertion:'The Steam response did not pass validation. Please reconnect.',failed_steam:'Steam confirmation failed. Please try again in a moment.',failed_storage:'Steam verification completed, but the account could not be saved. Please retry.'};
   if(status){message=statuses[status]||'';error=status!=='linked';history.replaceState(null,'',location.pathname)}
   function el(tag,text,className,parent=panel){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;parent.append(node);return node}
   function button(text,action,parent=panel){const b=el('button',text,'outline',parent);b.onclick=action;b.disabled=busy;return b}
+  function updateRefreshControl(){if(!refreshControl)return;const seconds=Math.max(0,Math.ceil(((account?.refreshAfter||0)-Date.now())/1000));refreshControl.disabled=busy||seconds>0;refreshControl.textContent=busy?'Refreshing…':seconds?'Refresh in '+Math.floor(seconds/60)+'m '+seconds%60+'s':'Refresh game data'}
   function draw(){
     panel.replaceChildren();
     top.textContent=account?'◉ Steam connected':'◉ Connect Steam';
@@ -16,7 +17,7 @@
     el('p',account?'Steam account verified. Your match performance is shown separately from the sample local leaderboard.':'Connect an existing Steam account to collect matches across Turbo, normal and other available modes.','',intro);
     if(!account){const a=el('a',undefined,'steam-signin',head);a.href='/api/steam/start';a.target='_top';const img=document.createElement('img');img.src='https://shared.fastly.steamstatic.com/community_assets/images/steamworks_docs/english/sits_large_border.png';img.alt='Sign in through Steam';img.width=180;img.height=35;a.append(img);el('p','This app remains private. No Steam password is stored by Local Rival.','steam-note');}
     else {
-      const actions=el('div',undefined,'steam-actions',head);button(busy?'Refreshing…':'Refresh game data',sync,actions);button('Disconnect',disconnect,actions);
+      const actions=el('div',undefined,'steam-actions',head);refreshControl=button(busy?'Refreshing…':'Refresh game data',sync,actions);button('Disconnect',disconnect,actions);
       const id=el('p','Steam ID '+account.steamId+' · Match performance pilot','steam-note');
       const link=el('a','View on Steam ↗','',id);link.href='https://steamcommunity.com/profiles/'+account.steamId;link.target='_blank';link.rel='noopener noreferrer';
       const grid=el('div',undefined,'live-grid');
@@ -38,10 +39,12 @@
       el('p','Local points reflect recent results and participation, not competitive skill or opponent strength. Equal points per match across all modes. The local leaderboard below remains sample data.','steam-note');
     }
     if(message){const note=el('p',message,error?'steam-message error':'steam-message');note.setAttribute('role',error?'alert':'status')}
+    updateRefreshControl();
   }
-  async function api(path,method='GET'){const r=await fetch(path,{method,credentials:'same-origin',headers:{Accept:'application/json'}});const type=r.headers.get('content-type')||'';if(!type.includes('application/json'))throw new Error('Sign in to Local Rival, then try connecting Steam again.');const data=await r.json();if(!r.ok)throw new Error(data.error||'The request could not be completed.');return data}
+  async function api(path,method='GET'){const r=await fetch(path,{method,credentials:'same-origin',headers:{Accept:'application/json'}});const type=r.headers.get('content-type')||'';if(!type.includes('application/json'))throw new Error('Sign in to Local Rival, then try connecting Steam again.');const data=await r.json();if(!r.ok){if(data.account)account=data.account;throw new Error(data.error||'The request could not be completed.')}return data}
   async function sync(){if(busy)return;busy=true;message='Fetching available game data…';error=false;draw();try{const data=await api('/api/games/sync','POST');account=data.account;message=data.errors.length?data.errors.join(' '):'Refresh complete. Provider data may lag behind your latest match.';error=!!data.errors.length}catch(e){message=e.message;error=true}finally{busy=false;draw()}}
   async function disconnect(){if(busy)return;if(!window.confirm('Disconnect Steam and remove your stored game data from Local Rival?'))return;busy=true;draw();try{await api('/api/steam/account','DELETE');account=null;message='Steam disconnected. Stored game data has been removed.';error=false}catch(e){message=e.message;error=true}finally{busy=false;draw()}}
+  setInterval(updateRefreshControl,1000);
   draw();api('/api/steam/account').then(data=>{account=data.account;draw();if(status==='linked'&&account)sync()}).catch(e=>{message=e.message;error=true;draw()});
 })();
 

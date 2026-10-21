@@ -14,3 +14,13 @@ test('raw provider errors and credentials never enter client diagnostic messages
   assert.equal(issue.code,'invalid_response');assert.ok(!JSON.stringify(issue).includes('super-secret'));assert.ok(!JSON.stringify(issue).includes('provider.example'));
   assert.equal(providerIssue(new ProviderError('rate_limited',429),'dota').code,'rate_limited');
 });
+test('provider Retry-After is respected and absent headers default to a ten-minute backoff',async()=>{
+  for(const [header,expected]of [['180',180],[null,600]]){
+    let issue;try{await fetchDota('76561198000000001',async()=>new Response('',{status:429,headers:header?{'Retry-After':header}:{}}))}catch(error){issue=providerIssue(error,'dota')}
+    assert.equal(issue.retryAfterSeconds,expected);
+  }
+});
+test('a separate OpenDota key is sent only to its API and never returned in player data',async()=>{
+  const d=await fetchDota('76561198000000001',async url=>{assert.equal(new URL(url).hostname,'api.opendota.com');assert.equal(new URL(url).searchParams.get('api_key'),'fake-opendota-key');return Response.json(String(url).includes('/matches?')?[]:{});},{apiKey:'fake-opendota-key'});
+  assert.ok(!JSON.stringify(d).includes('fake-opendota-key'));
+});

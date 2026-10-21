@@ -7,8 +7,12 @@ The Site remains private and requires its existing ChatGPT access. Steam is link
 1. Open the Site and select Sign in through Steam.
 2. Complete sign-in on steamcommunity.com. Return to the same browser with the Site identity and state cookie intact.
 3. After a verified return, Dota 2 data refreshes automatically. Enable Expose Public Match Data in Dota 2 for available public match data. OpenDota may have delayed, missing or old data.
-4. Refresh game data retrieves the latest provider response, with a one-minute server-enforced cooldown. It is not a live in-match telemetry feed. Old successful data survives a provider outage, retaining its fetch timestamp.
+4. Refresh game data retrieves the latest provider response, with a one-minute server-enforced cooldown. HTTP 429 respects the provider Retry-After header (60 seconds to 1 hour), or pauses for 10 minutes when no header is provided. The UI shows the remaining wait. It is not a live in-match telemetry feed. Old successful data survives a provider outage, retaining its fetch timestamp and a separate refresh-failure notice.
 5. Disconnect deletes the account link, cached game data and pending login attempts.
+
+## OpenDota quota
+
+The hosted app can be rate-limited even when a separate direct request succeeds. A 429 is not evidence of private match data. Optionally configure a separate `OPENDOTA_API_KEY` as a Sites secret to use an OpenDota account's API quota; a Steam Web API key cannot replace it. Never transmit either key to the other provider. Keys are not returned in account or provider-status responses. The API returns safe per-provider status codes and HTTP status values without raw exception text or upstream error bodies.
 
 ## Counter-Strike setup
 
