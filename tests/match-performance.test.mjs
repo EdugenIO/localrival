@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fetchDota} from '../lib/game-data.mjs';
+import {fetchDota,normalizeDota} from '../lib/game-data.mjs';
 import {matchPerformance,dotaMode} from '../lib/match-performance.mjs';
 const steamId='76561198000000001';
 const fixture=(id,game_mode,lobby_type,win=true,extra={})=>({match_id:id,player_slot:0,radiant_win:win,kills:4,deaths:2,assists:8,start_time:id,game_mode,lobby_type,...extra});
@@ -36,4 +36,8 @@ test('Turbo and normal receive the same points per result; KDA does not change p
 test('unknown modes are retained and labels preserve Turbo precedence',()=>{
   assert.equal(dotaMode(23,7),'Turbo');assert.equal(dotaMode(22,0),'Normal / other · All Draft');
   assert.equal(dotaMode(22,7),'Ranked · All Draft');assert.equal(dotaMode(999,99),'Normal / other · Other mode');
+});
+test('profile overview keeps missing replay metrics distinct from zero and separates recorded totals',()=>{
+  const d=normalizeDota({profile:{personaname:'Player'}},[fixture(1,23,0,true,{hero_id:27,gold_per_min:0}),fixture(2,23,0,false,{hero_id:27,gold_per_min:null}),fixture(3,22,0,true,{hero_id:5,gold_per_min:500})],{win:32,lose:35});
+  assert.equal(d.lifetime.matches,67);assert.equal(d.matches.length,3);assert.equal(d.averages.goldPerMinute.value,250);assert.equal(d.averages.goldPerMinute.samples,2);assert.equal(d.averages.heroDamage,null);assert.deepEqual(d.heroes[0],{id:27,matches:2,wins:1});
 });

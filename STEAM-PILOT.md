@@ -12,6 +12,12 @@ The Site remains private and requires its existing ChatGPT access. Steam is link
 
 ## OpenDota quota
 
+The **Sync OpenDota profile** button loads the connected player's public profile, latest 50 all-mode matches (including optional replay-stat projections), and all-mode recorded win/loss totals directly through the visitor's browser. OpenDota permits this cross-origin access. No Steam or OpenDota API key is sent by this path. The browser respects its own rate limit; it does not rotate identities, proxy requests or auto-retry blocked calls.
+
+`POST /api/dota/browser-sync` requires the signed-in Site user and matching linked Steam/account IDs. It limits the request to 200 KB and 50 matches, recalculates points/averages/hero breakdowns on the server, stores only that user's Dota snapshot, and enforces a one-minute save cooldown. Counter-Strike data and the hosted provider's cooldown remain separate. Browser-supplied snapshots carry `leaderboardEligible: false`; they are personal data, not authenticated provider proof for competitive local standings.
+
+Profile display includes hero names from OpenDota's open-source dotaconstants, match K/D/A and duration, recorded all-mode totals, most-played heroes over the latest window, and available replay averages. Missing replay metrics are omitted instead of treated as zero. All-mode totals may differ from OpenDota's default standard-only overview counters.
+
 The hosted app can be rate-limited even when a separate direct request succeeds. A 429 is not evidence of private match data. Optionally configure a separate `OPENDOTA_API_KEY` as a Sites secret to use an OpenDota account's API quota; a Steam Web API key cannot replace it. Never transmit either key to the other provider. Keys are not returned in account or provider-status responses. The API returns safe per-provider status codes and HTTP status values without raw exception text or upstream error bodies.
 
 ## Counter-Strike setup

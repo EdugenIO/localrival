@@ -12,7 +12,7 @@ async function setup(){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(path.join(root,'drizzle/0000_flashy_alex_power.sql'),'utf8'));
   const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,rateLimited:false,calls:0};
   const db={prepare(text){let args=[];return {bind(...values){args=values;return this},async first(){return sql.prepare(text).get(...args)||null},async run(){return sql.prepare(text).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}};
-  const context=vm.createContext({console,URL,URLSearchParams,TextEncoder,Uint8Array,crypto,Request,Response,AbortSignal,Date,process:{env:{NODE_ENV:'production'}},fetch:async(url,options)=>{
+  const context=vm.createContext({console,URL,URLSearchParams,TextEncoder,TextDecoder,Uint8Array,crypto,Request,Response,AbortSignal,Date,process:{env:{NODE_ENV:'production'}},fetch:async(url,options)=>{
     session.calls++;const target=String(url);
     if(target===STEAM_ENDPOINT){assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('is_valid:'+session.steamValid+'\n')}
     if(target.includes('opendota')){if(session.rateLimited)return new Response('',{status:429,headers:{'Retry-After':'300'}});if(session.failDota)return new Response('',{status:503});return Response.json(target.includes('/matches?')?[{match_id:1,player_slot:0,radiant_win:true,kills:1,deaths:0,assists:2}]:{profile:{personaname:'Alice'},rank_tier:43})}
@@ -61,4 +61,23 @@ test('provider backoff persists and repeated refreshes do not call the provider'
   h.sql.prepare('UPDATE steam_links SET refresh_after=0').run();h.session.rateLimited=false;h.session.failDota=true;
   const next=await(await sync.POST(request())).json();assert.equal(next.account.dota.syncIssue.httpStatus,503);assert.match(next.account.dota.notice,/server problem/);
 });
+test('browser profile sync is account-bound, recomputes scores, and leaves Counter-Strike data intact',async()=>{
+  const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));
+  h.sql.prepare('UPDATE steam_links SET cs_data=?').run(JSON.stringify({source:'Steam',status:'ok',stats:{total_kills:123}}));
+  const route=await h.route('dota/browser-sync');
+  const payload={steamId:'76561198000000001',accountId:'39734273',profile:{profile:{account_id:39734273,personaname:'Browser Player'}},totals:{win:32,lose:35},points:999,matches:[{match_id:99,radiant_win:true,player_slot:0,hero_id:27,game_mode:23,lobby_type:0,kills:0,deaths:1,assists:18,duration:1095}]};
+  const request=(body=payload,origin=SITE_ORIGIN)=>new Request(SITE_ORIGIN+'/api/dota/browser-sync',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  assert.equal((await route.POST(request(payload,'https://evil.example'))).status,403);
+  assert.equal((await route.POST(request({...payload,accountId:'123'}))).status,403);
+  const response=await route.POST(request());assert.equal(response.status,200);const data=await response.json();
+  assert.equal(data.account.dota.name,'Browser Player');assert.equal(data.account.dota.performance.points,3);assert.equal(data.account.dota.syncMethod,'browser');assert.equal(data.account.dota.leaderboardEligible,false);assert.equal(data.account.dota.lifetime.matches,67);assert.equal(data.account.cs.stats.total_kills,123);
+  assert.equal((await route.POST(request())).status,429);
+  h.session.user={userId:'bob',email:'bob@example.test'};assert.equal((await route.POST(request())).status,409);
+  h.session.user=null;assert.equal((await route.POST(request())).status,401);
+});
+test('browser profile import limits input size before parsing',async()=>{
+  const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));const route=await h.route('dota/browser-sync');
+  const response=await route.POST(new Request(SITE_ORIGIN+'/api/dota/browser-sync',{method:'POST',headers:{Origin:SITE_ORIGIN},body:'x'.repeat(200001)}));assert.equal(response.status,413);
+});
+
 
