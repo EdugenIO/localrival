@@ -22,7 +22,7 @@ export async function POST(request:Request) {
     providerStatus[game]=issue;
     errors.push(issue.message);
     const old=i===0?link.dota_data:link.cs_data;
-    if(old)return {...JSON.parse(old),syncIssue:issue};
+    if(old){const saved=JSON.parse(old);return {...saved,notice:saved.status==='error'?issue.message:saved.notice,syncIssue:issue};}
     return {source:issue.source,status:'error',matches:[],performance:null,winRate:null,notice:issue.message,syncIssue:issue};
   });
   await database().prepare('UPDATE steam_links SET dota_data=?,cs_data=?,synced_at=?,refresh_after=? WHERE user_id=? AND steam_id=?').bind(data[0]?JSON.stringify(data[0]):null,data[1]?JSON.stringify(data[1]):null,Date.now(),refreshAfter,user.userId,link.steam_id).run();

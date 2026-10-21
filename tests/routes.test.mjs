@@ -58,5 +58,7 @@ test('provider backoff persists and repeated refreshes do not call the provider'
   assert.ok(data.account.refreshAfter>=before+300000);const calls=h.session.calls;
   assert.equal((await sync.POST(request())).status,429);assert.equal(h.session.calls,calls);
   assert.equal(h.sql.prepare('SELECT refresh_after FROM steam_links').get().refresh_after,data.account.refreshAfter);
+  h.sql.prepare('UPDATE steam_links SET refresh_after=0').run();h.session.rateLimited=false;h.session.failDota=true;
+  const next=await(await sync.POST(request())).json();assert.equal(next.account.dota.syncIssue.httpStatus,503);assert.match(next.account.dota.notice,/server problem/);
 });
 
