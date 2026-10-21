@@ -21,6 +21,7 @@ async function setup(){
   const modules=new Map();
   async function load(file){
     if(modules.has(file))return modules.get(file);
+    if(file.endsWith('.json')){const mod=new vm.SyntheticModule(['default'],function(){this.setExport('default',JSON.parse(readFileSync(file,'utf8')))},{context});modules.set(file,mod);return mod;}
     const source=readFileSync(file,'utf8');
     const code=file.endsWith('.ts')?ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText:source;
     const mod=new vm.SourceTextModule(code,{context,identifier:file});modules.set(file,mod);
@@ -84,14 +85,18 @@ test('browser profile import limits input size before parsing',async()=>{
 
 test('live ladder requires opt-in, recalculates scores, hides account IDs and isolates membership',async()=>{
  const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));
- h.sql.prepare('UPDATE steam_links SET dota_data=? WHERE user_id=?').run(JSON.stringify({matches:[{won:true,abandoned:false},{won:false,abandoned:false},{won:true,abandoned:true}],performance:{points:99999},syncMethod:'browser',fetchedAt:123}),'alice');
+ h.sql.prepare('UPDATE steam_links SET dota_data=? WHERE user_id=?').run(JSON.stringify({name:'Synced gamer',matches:[{won:true,abandoned:false},{won:false,abandoned:false},{won:true,abandoned:true}],performance:{points:99999},syncMethod:'browser',fetchedAt:123}),'alice');
  const route=await h.route('leaderboard');const req=body=>new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify(body)});
  assert.equal((await(await route.GET()).json()).players.length,0);
- assert.equal((await route.POST(req({alias:'Alice',postcode:'9999'}))).status,400);
+ assert.equal((await route.POST(req({alias:'Alice',postcode:'abcd'}))).status,400);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'6000'}))).status,200);
- let data=await(await route.GET()).json();assert.equal(data.players.length,1);assert.equal(data.players[0].points,4);assert.equal(data.players[0].unverified,true);assert.equal(data.membership.postcode,'6000');assert.equal(JSON.stringify(data).includes('7656119'),false);assert.equal(JSON.stringify(data).includes('user_id'),false);
+ let data=await(await route.GET()).json();assert.equal(data.players.length,1);assert.equal(data.players[0].points,4);assert.equal(data.players[0].name,'Synced gamer');assert.equal(data.players[0].unverified,true);assert.equal(data.membership.postcode,'6000');
+ assert.equal((await route.POST(req({alias:'Forged name',postcode:'6027',locality:'Joondalup'}))).status,200);data=await(await route.GET()).json();assert.equal(data.players[0].name,'Synced gamer');assert.equal(data.players[0].postcode,'6027');assert.equal(data.players[0].location[0],'Joondalup');assert.equal(data.players[0].location[3],'Perth');
+ assert.equal((await route.POST(req({postcode:'0800',locality:'Darwin City'}))).status,200);data=await(await route.GET()).json();assert.equal(data.membership.postcode,'0800');
+ assert.equal((await route.POST(req({postcode:'6027',locality:'Made up town'}))).status,400);assert.equal(JSON.stringify(data).includes('7656119'),false);assert.equal(JSON.stringify(data).includes('user_id'),false);
  h.session.user={userId:'bob'};assert.equal((await route.POST(req({alias:'Bob',postcode:'6000'}))).status,409);await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await(await route.GET()).json()).players.length,1);
  h.session.user={userId:'alice'};assert.equal((await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:'https://evil.example'}}))).status,403);
  await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await(await route.GET()).json()).players.length,0);
  h.session.user=null;assert.equal((await route.GET()).status,401);assert.equal((await route.POST(req({alias:'A',postcode:'6000'}))).status,401);
 });
+

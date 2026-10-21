@@ -1,0 +1,1 @@
+Postcode/locality reference: https://github.com/matthewproctor/australianpostcodes (community sourced), retrieved 21 October 2026. Only postcode, locality, state and city grouping retained. Metropolitan city grouping uses SA4 name prefixes; other areas group by selected locality. Locations are self-declared, not residence verification.
