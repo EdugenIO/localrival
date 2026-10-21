@@ -5,7 +5,7 @@
   const nav=document.createElement('button');nav.textContent='◉   Steam & live data';nav.onclick=top.onclick;document.querySelector('nav').append(nav);
   let account=null,busy=false,message='',error=false;
   const query=new URLSearchParams(location.search),status=query.get('steam');
-  const statuses={linked:'Steam verified. Fetching your available game data…',expired:'This Steam connection expired. Please try again.',cancelled:'Steam connection cancelled. You can reconnect whenever you are ready.',already_linked:'This Steam account is already connected to another Local Rival user.',failed:'Steam could not verify this connection. Please try again.'};
+  const statuses={linked:'Steam verified. Fetching your available game data…',expired:'This Steam connection expired. Please try again.',cancelled:'Steam connection cancelled. You can reconnect whenever you are ready.',already_linked:'This Steam account is already connected to another Local Rival user.',failed:'Steam could not verify this connection. Please try again.',failed_assertion:'The Steam response did not pass validation. Please reconnect.',failed_steam:'Steam confirmation failed. Please try again in a moment.',failed_storage:'Steam verification completed, but the account could not be saved. Please retry.'};
   if(status){message=statuses[status]||'';error=status!=='linked';history.replaceState(null,'',location.pathname)}
   function el(tag,text,className,parent=panel){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;parent.append(node);return node}
   function button(text,action,parent=panel){const b=el('button',text,'outline',parent);b.onclick=action;b.disabled=busy;return b}
@@ -35,3 +35,4 @@
   async function disconnect(){if(busy)return;if(!window.confirm('Disconnect Steam and remove your stored game data from Local Rival?'))return;busy=true;draw();try{await api('/api/steam/account','DELETE');account=null;message='Steam disconnected. Stored game data has been removed.';error=false}catch(e){message=e.message;error=true}finally{busy=false;draw()}}
   draw();api('/api/steam/account').then(data=>{account=data.account;draw();if(status==='linked'&&account)sync()}).catch(e=>{message=e.message;error=true;draw()});
 })();
+
