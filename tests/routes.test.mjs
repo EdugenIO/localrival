@@ -26,7 +26,7 @@ async function setup(){
     const code=file.endsWith('.ts')?ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText:source;
     const mod=new vm.SourceTextModule(code,{context,identifier:file});modules.set(file,mod);
     await mod.link(async(spec,ref)=>{
-      if(spec==='next/headers')return new vm.SyntheticModule(['headers'],function(){this.setExport('headers',async()=>new Headers({cookie:session.cookie||''}))},{context});
+      if(spec==='next/headers')return new vm.SyntheticModule(['headers'],function(){this.setExport('headers',async()=>new Headers({cookie:session.cookie||'',...(session.authorization?{authorization:session.authorization}:{})}))},{context});
       if(spec==='cloudflare:workers')return new vm.SyntheticModule(['env'],function(){this.setExport('env',{DB:db,NIGHTLY_SYNC_TOKEN:'test-job-token'})},{context});
       if(spec.endsWith('/chatgpt-auth'))return new vm.SyntheticModule(['getChatGPTUser'],function(){this.setExport('getChatGPTUser',async()=>session.user)},{context});
       let dep=path.resolve(path.dirname(ref.identifier),spec);if(!path.extname(dep))dep+='.ts';return load(dep);
@@ -107,7 +107,7 @@ test('Steam-only login creates a persistent hashed session, returns to saved dat
  const account=await h.route('steam/account');let data=await(await account.GET()).json();assert.equal(data.account.steamId,'76561198000000001');assert.equal(h.sql.prepare('SELECT token_hash FROM player_sessions').get().token_hash.includes(h.session.cookie.split('=')[1]),false);
  h.sql.prepare('UPDATE steam_links SET dota_data=?').run(JSON.stringify({name:'Saved player',matches:[]}));
  h.session.cookie='';const b=await start(h);response=await ret.GET(callback(b.location,b.state));h.session.cookie=response.headers.getSetCookie().find(c=>c.startsWith('__Host-lr-session=')).split(';')[0];data=await(await account.GET()).json();assert.equal(data.account.dota.name,'Saved player');
- const logout=await h.route('session/logout');assert.equal((await logout.POST(new Request(SITE_ORIGIN+'/api/session/logout',{method:'POST',headers:{Origin:SITE_ORIGIN}}))).status,204);assert.equal((await(await account.GET()).json()).account,null);
+ const logout=await h.route('session/logout');assert.equal((await logout.POST(new Request(SITE_ORIGIN+'/api/session/logout',{method:'POST',headers:{Origin:SITE_ORIGIN}}))).status,200);assert.equal((await(await account.GET()).json()).account,null);
  h.session.cookie='__Host-lr-session='+ 'a'.repeat(64);assert.equal((await(await account.GET()).json()).account,null);
 });
 
@@ -121,4 +121,13 @@ test('nightly writer requires its secret, selects stale accounts, and preserves 
  assert.equal((await(await route.POST(request(payload))).json()).skipped,true);assert.equal((await route.POST(request(payload,'wrong'))).status,401);
  const saved=JSON.parse(h.sql.prepare('SELECT dota_data FROM steam_links').get().dota_data);assert.equal(saved.syncMethod,'nightly');assert.equal(saved.performance.points,6);
  const empty={...payload,expectedFetchedAt:saved.fetchedAt,matches:[]};await route.POST(request(empty));assert.equal(JSON.parse(h.sql.prepare('SELECT dota_data FROM steam_links').get().dota_data).matches.length,1);
+});
+
+test('Pages Steam login uses a one-use browser-bound handoff and bearer session',async()=>{
+ const h=await setup();h.session.user=null;const verifier='b'.repeat(64);const challenge=await (await import('../lib/steam-openid.mjs')).hashState(verifier);
+ const startRoute=await h.route('steam/start');const response=await startRoute.GET(new Request(SITE_ORIGIN+'/api/steam/start?frontend=pages&challenge='+challenge));const location=response.headers.get('location');const returnTo=new URL(location).searchParams.get('openid.return_to');const state=new URL(returnTo).searchParams.get('state');const ret=await h.route('steam/return');const signedIn=await ret.GET(callback(location,state));const target=new URL(signedIn.headers.get('location'));assert.equal(target.origin,'https://edugenio.github.io');assert.equal(target.pathname,'/localrival/');const code=new URLSearchParams(target.hash.slice(1)).get('steam_ticket');assert.ok(code);
+ const exchange=await h.route('session/exchange');const request=(v=verifier,origin='https://edugenio.github.io')=>new Request(SITE_ORIGIN+'/api/session/exchange',{method:'POST',headers:{Origin:origin},body:JSON.stringify({code,verifier:v})});
+ assert.equal((await exchange.POST(request(verifier,'https://evil.example'))).status,403);assert.equal((await exchange.POST(request('c'.repeat(64)))).status,401);const issued=await exchange.POST(request());assert.equal(issued.status,200);const data=await issued.json();h.session.authorization='Bearer '+data.token;
+ const account=await h.route('steam/account');assert.equal((await(await account.GET()).json()).account.steamId,'76561198000000001');assert.equal((await exchange.POST(request())).status,401);
+ const logout=await h.route('session/logout');await logout.POST(new Request(SITE_ORIGIN+'/api/session/logout',{method:'POST',headers:{Origin:'https://edugenio.github.io'}}));assert.equal((await(await account.GET()).json()).account,null);
 });

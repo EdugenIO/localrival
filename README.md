@@ -2,7 +2,7 @@
 
 An open-source Dota 2 community leaderboard connecting gamers to their postcode, city/town, state and country.
 
-[Try the live app](https://local-rival-brett.stony-fir-8901.chatgpt.site/leaderboard)
+[Try the live app on GitHub Pages](https://edugenio.github.io/localrival/)
 
 ## Features
 

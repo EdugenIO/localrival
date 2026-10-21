@@ -22,3 +22,8 @@ GitHub Actions workflow `.github/workflows/nightly-dota.yml` runs at 18:00 UTC (
 Refresh accounts older than six hours. Read OpenDota from the GitHub runner with at least 1.1 seconds between requests and stop on rate limits. Keep saved data on errors or empty responses. A conditional update prevents overwriting a newer manual sync or recreating a disconnected account. The job paginates 100 accounts at a time. GitHub may delay scheduled jobs; it is not an exact-time guarantee. Ordinary users keep the manual browser sync fallback.
 
 Counter-Strike is hidden and no longer refreshed. Existing stored CS records are retained for a future return.
+
+## GitHub Pages frontend
+The main public frontend is https://edugenio.github.io/localrival/. `.github/workflows/pages.yml` builds the frontend from public/ with scripts/build-pages.mjs and deploys on main pushes. GitHub Pages hosts the actual static application, not a redirect. Account APIs, Steam OpenID verification, D1 data and nightly writes stay on the Sites backend.
+
+Pages uses bearer sessions so third-party cookie blocking does not prevent API requests. A random browser verifier is stored in sessionStorage before Steam sign-in. Its hash is bound to the signed OpenID callback. The backend issues a two-minute one-use code returned in the Pages URL fragment; exchange requires the verifier and exact Pages origin. The exchange returns a 30-day session token stored on the Pages origin. Only session hashes are in the database. Sign-out revokes that token. CORS is allowed only for https://edugenio.github.io; other projects on that origin must be trusted.

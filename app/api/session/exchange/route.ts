@@ -1,0 +1,6 @@
+import {database,json} from '../../../../lib/server';
+import {PAGES_ORIGIN,handoffTable} from '../../../../lib/pages-auth';
+import {hashState} from '../../../../lib/steam-openid.mjs';
+import {createSession,cookieValue,SESSION_COOKIE} from '../../../../lib/steam-session';
+export const dynamic='force-dynamic';
+export async function POST(request:Request){if(request.headers.get('origin')!==PAGES_ORIGIN)return json({error:'Invalid origin'},403);const raw=await request.text();if(raw.length>1024)return json({error:'Invalid exchange'},400);let body;try{body=JSON.parse(raw)}catch{return json({error:'Invalid exchange'},400)}if(!/^[a-f0-9]{64}$/.test(body?.code)||!/^[a-f0-9]{64}$/.test(body?.verifier))return json({error:'Invalid exchange'},400);await handoffTable(database());const match=await database().prepare('DELETE FROM pages_handoffs WHERE code_hash=? AND challenge=? AND expires_at>? RETURNING user_id').bind(await hashState(body.code),await hashState(body.verifier),Date.now()).first<{user_id:string}>();if(!match)return json({error:'This sign-in expired. Please sign in with Steam again.'},401);const cookie=await createSession(database(),match.user_id);return json({token:cookieValue(cookie,SESSION_COOKIE)});}

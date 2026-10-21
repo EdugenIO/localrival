@@ -65,7 +65,7 @@
       const r=await fetch('/api/dota/browser-sync',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({steamId:account.steamId,accountId:id,profile,matches,totals})});const data=await r.json();if(!r.ok){if(data.account)account=data.account;throw new Error(data.error||'Could not save your profile.')}account=data.account;message='OpenDota profile synced: '+account.dota.matches.length+' matches available. Turbo and normal matches are included.';
     }catch(e){message=e.message;error=true}finally{busy=false;draw();window.dispatchEvent(new Event("localrival-sync"))}
   }
-  async function signOut(){if(busy)return;await api('/api/session/logout','POST');location.href='/signout-with-chatgpt?return_to=%2Fleaderboard';}
+  async function signOut(){if(busy)return;await api('/api/session/logout','POST');if(window.localRivalPages){localStorage.removeItem('localrival-pages-session');location.href='./';}else location.href='/signout-with-chatgpt?return_to=%2Fleaderboard';}
   async function disconnect(){if(busy)return;if(!window.confirm('Disconnect Steam and remove your stored game data from Local Rival?'))return;busy=true;draw();try{await api('/api/steam/account','DELETE');account=null;message='Steam disconnected. Stored game data has been removed.';error=false}catch(e){message=e.message;error=true}finally{busy=false;draw();window.dispatchEvent(new Event("localrival-sync"))}}
   setInterval(updateRefreshControl,1000);
   draw();Promise.all([api('/api/steam/account'),fetch('/dota-hero-names.json').then(r=>r.json()).catch(()=>({}))]).then(([data,names])=>{account=data.account;heroNames=names;draw();if(status==='linked'&&account)sync()}).catch(e=>{message=e.message;error=true;draw()});
