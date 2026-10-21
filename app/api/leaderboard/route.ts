@@ -16,7 +16,7 @@ export async function GET(){
  if(row.user_id===user.userId)membership={alias:name,postcode:row.postcode,locality:location[0]};
  if(!Array.isArray(data?.matches))continue;
  const matches=data.matches.slice(0,50);const performance=matchPerformance(matches);if(!performance.eligibleMatches)continue;
- players.push({name,postcode:row.postcode,location,points:performance.points,win:Math.round(performance.wins/performance.eligibleMatches*100),matches:performance.eligibleMatches,form:matches.slice(0,5).map((m:any)=>m.abandoned?'A':m.won?'W':'L').join(''),fetchedAt:data.fetchedAt||null,unverified:data.syncMethod==='browser',provisional:performance.provisional,isYou:row.user_id===user.userId});
+ players.push({name,postcode:row.postcode,location,points:performance.points,win:Math.round(performance.wins/performance.eligibleMatches*100),matches:performance.eligibleMatches,form:matches.slice(0,5).map((m:any)=>m.abandoned?'A':m.won?'W':'L').join(''),fetchedAt:data.fetchedAt||null,provisional:performance.provisional,isYou:row.user_id===user.userId});
  }
  const ownLink=await getLink(user.userId);let gamerName=null;try{gamerName=JSON.parse(ownLink?.dota_data||'null')?.name||null}catch{}
  return json({players,membership,gamerName,updatedAt:Date.now()});

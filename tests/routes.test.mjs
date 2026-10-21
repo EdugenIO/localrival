@@ -90,7 +90,7 @@ test('live ladder requires opt-in, recalculates scores, hides account IDs and is
  assert.equal((await(await route.GET()).json()).players.length,0);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'abcd'}))).status,400);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'6000'}))).status,200);
- let data=await(await route.GET()).json();assert.equal(data.players.length,1);assert.equal(data.players[0].points,4);assert.equal(data.players[0].name,'Synced gamer');assert.equal(data.players[0].unverified,true);assert.equal(data.membership.postcode,'6000');
+ let data=await(await route.GET()).json();assert.equal(data.players.length,1);assert.equal(data.players[0].points,4);assert.equal(data.players[0].name,'Synced gamer');assert.equal('unverified' in data.players[0],false);assert.equal(data.membership.postcode,'6000');
  assert.equal((await route.POST(req({alias:'Forged name',postcode:'6027',locality:'Joondalup'}))).status,200);data=await(await route.GET()).json();assert.equal(data.players[0].name,'Synced gamer');assert.equal(data.players[0].postcode,'6027');assert.equal(data.players[0].location[0],'Joondalup');assert.equal(data.players[0].location[3],'Perth');
  assert.equal((await route.POST(req({postcode:'0800',locality:'Darwin City'}))).status,200);data=await(await route.GET()).json();assert.equal(data.membership.postcode,'0800');
  assert.equal((await route.POST(req({postcode:'6027',locality:'Made up town'}))).status,400);assert.equal(JSON.stringify(data).includes('7656119'),false);assert.equal(JSON.stringify(data).includes('user_id'),false);
