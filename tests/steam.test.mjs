@@ -27,7 +27,7 @@ for(const [label,key,value] of [
   ['missing signature','openid.sig',''],
 ])test('rejects '+label,()=>{const p=assertion();p.set(key,value);assert.throws(()=>validateAssertion(p,returnTo))});
 test('duplicate callback parameters are rejected',()=>{const p=assertion();p.append('openid.claimed_id',p.get('openid.claimed_id'));assert.throws(()=>validateAssertion(p,returnTo))});
-test('verification posts back only to Steam, rather than trusting a browser signature',async()=>{let called=false;await verifyWithSteam(assertion(),async(url,options)=>{called=true;assert.equal(url,STEAM_ENDPOINT);assert.equal(options.method,'POST');assert.equal(options.redirect,'error');assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('ns:'+OPENID_NS+'\nis_valid:true\n')});assert.ok(called);await assert.rejects(verifyWithSteam(assertion(),async()=>new Response('is_valid:false\n')));await assert.rejects(verifyWithSteam(assertion(),async()=>new Response('error',{status:503})));});
+test('verification posts back only to Steam, rather than trusting a browser signature',async()=>{let called=false;await verifyWithSteam(assertion(),async(url,options)=>{called=true;assert.equal(url,STEAM_ENDPOINT);assert.equal(options.method,'POST');assert.equal(options.redirect,'manual');assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('ns:'+OPENID_NS+'\nis_valid:true\n')});assert.ok(called);await assert.rejects(verifyWithSteam(assertion(),async()=>new Response('is_valid:false\n')));await assert.rejects(verifyWithSteam(assertion(),async()=>new Response('error',{status:503})));});
 test('Dota uses account ID, computes each team result, and does not invent MMR',async()=>{const d=await fetchDota(steamId,async url=>{assert.ok(url.includes('/players/39734273'));return Response.json(url.endsWith('recentMatches')?[
   {match_id:1,player_slot:0,radiant_win:true,kills:5,deaths:2,assists:10,lobby_type:7},
   {match_id:2,player_slot:128,radiant_win:true,kills:2,deaths:5,assists:1,lobby_type:0},
@@ -37,3 +37,10 @@ test('Dota missing public matches is an honest empty state',async()=>{const d=aw
 test('provider errors and malformed match data are rejected',async()=>{await assert.rejects(fetchDota(steamId,async()=>new Response('',{status:429})));await assert.rejects(fetchDota(steamId,async()=>Response.json({})));});
 test('Counter-Strike without key does not fake a connection or call Steam stats',async()=>{const c=await fetchCounterStrike(steamId,undefined,()=>{throw Error('Must not fetch')});assert.equal(c.status,'not_configured');assert.equal(c.stats,undefined)});
 test('Counter-Strike exposes only allowed stats and never returns the key',async()=>{const c=await fetchCounterStrike(steamId,'fake-test-key',async url=>{assert.equal(url.hostname,'api.steampowered.com');assert.equal(url.searchParams.get('appid'),'730');return Response.json({playerstats:{stats:[{name:'total_kills',value:123},{name:'unexpected',value:999}]}})});assert.deepEqual(c.stats,{total_kills:123});assert.ok(!JSON.stringify(c).includes('fake-test-key'))});
+test('verification and data adapters reject provider redirects without following them',async()=>{
+  const redirect=async(_url,options)=>{assert.equal(options.redirect,'manual');return new Response(null,{status:302,headers:{Location:'https://untrusted.example'}})};
+  await assert.rejects(verifyWithSteam(assertion(),redirect));
+  await assert.rejects(fetchDota(steamId,redirect));
+  await assert.rejects(fetchCounterStrike(steamId,'fake-test-key',redirect));
+});
+

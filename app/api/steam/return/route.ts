@@ -22,10 +22,7 @@ export async function GET(request:Request) {
     if(existing && existing.user_id!==user.userId) return finish('already_linked');
     await database().prepare('INSERT INTO steam_links (user_id,steam_id,linked_at,refresh_after) VALUES (?,?,?,0) ON CONFLICT(user_id) DO UPDATE SET steam_id=excluded.steam_id,linked_at=excluded.linked_at,dota_data=NULL,cs_data=NULL,synced_at=NULL,refresh_after=0').bind(user.userId,steamId,Date.now()).run();
     return finish('linked');
-  } catch (error) {
-    const text=error instanceof Error?error.message:'';
-    const code=/illegal invocation|incorrect.*this/i.test(text)?'runtime_invocation':/timeout|abort/i.test(text)?'timeout':text==='Steam did not verify this login'?'signature_rejected':text==='Steam verification unavailable'?'provider_unavailable':stage==='assertion'?'assertion_rejected':'unexpected';
-    console.error('[DEBUG-steam-callback]',JSON.stringify({stage,code}));
+  } catch {
     return finish('failed_'+stage);
   }
 }

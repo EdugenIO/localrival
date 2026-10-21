@@ -25,4 +25,6 @@ Configure `STEAM_WEB_API_KEY` as a secret via Sites runtime environment variable
 
 ## Security checks
 
+Outbound requests use `redirect: manual` and reject non-success responses, including redirects. Cloudflare Workers rejects `redirect: error` before sending a request. The Worker-runtime regression tests cover Steam verification and both game-data adapters to prevent Node-only tests from missing this difference again.
+
 Use the existing server-side Site identity for all account operations. OpenID uses a random one-use state bound to an HttpOnly Secure SameSite cookie and the Site user; the callback verifies expected origin/return URL, endpoint, claimed identity, signed fields and nonce age, and calls Steam check_authentication before saving. Cross-origin writes and anonymous account reads are rejected. No Steam credentials or Web API key are returned to browsers.
