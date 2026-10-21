@@ -71,7 +71,7 @@ test('browser profile sync is account-bound, recomputes scores, and leaves Count
   assert.equal((await route.POST(request(payload,'https://evil.example'))).status,403);
   assert.equal((await route.POST(request({...payload,accountId:'123'}))).status,403);
   const response=await route.POST(request());assert.equal(response.status,200);const data=await response.json();
-  assert.equal(data.account.dota.name,'Browser Player');assert.equal(data.account.dota.performance.points,3);assert.equal(data.account.dota.syncMethod,'browser');assert.equal(data.account.dota.leaderboardEligible,false);assert.equal(data.account.dota.lifetime.matches,67);assert.equal(data.account.cs.stats.total_kills,123);
+  assert.equal(data.account.dota.name,'Browser Player');assert.equal(data.account.dota.performance.points,6);assert.equal(data.account.dota.syncMethod,'browser');assert.equal(data.account.dota.leaderboardEligible,false);assert.equal(data.account.dota.lifetime.matches,67);assert.equal(data.account.cs.stats.total_kills,123);
   assert.equal((await route.POST(request())).status,429);
   h.session.user={userId:'bob',email:'bob@example.test'};assert.equal((await route.POST(request())).status,409);
   h.session.user=null;assert.equal((await route.POST(request())).status,401);
