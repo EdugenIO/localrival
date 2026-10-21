@@ -1,0 +1,31 @@
+# Paid resources: do not create until the owner approves the current estimate.
+services:
+  - type: web
+    name: localrival-api
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    buildCommand: npm ci && npm run build:render
+    startCommand: npm run start:render
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: localrival-db
+          property: connectionString
+      - key: NIGHTLY_SYNC_TOKEN
+        sync: false
+databases:
+  - name: localrival-db
+    plan: basic-256mb
+    region: singapore
+    databaseName: localrival
+    user: localrival
+    diskSizeGB: 1
+    ipAllowList: []

@@ -6,7 +6,7 @@
   const top=document.getElementById('joinTop');top.textContent='◉ Connect Steam';top.onclick=()=>{panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('a,button')?.focus()};
   document.getElementById('profileNav').onclick=top.onclick;
   const nav=document.createElement('button');nav.textContent='◉   Steam & live data';nav.onclick=top.onclick;document.querySelector('nav').append(nav);
-  let account=null,busy=false,message='',error=false,matchFilter='all',refreshControl=null,browserControl=null,browserRetryAt=0,heroNames={};
+  let accountLoading=true,account=null,busy=false,message='',error=false,matchFilter='all',refreshControl=null,browserControl=null,browserRetryAt=0,heroNames={};
   const query=new URLSearchParams(location.search),status=query.get('steam');
   const statuses={linked:'Steam verified. Fetching your available game data…',expired:'This Steam connection expired. Please try again.',cancelled:'Steam connection cancelled. You can reconnect whenever you are ready.',already_linked:'This Steam account is already connected to another Local Rival user.',failed:'Steam could not verify this connection. Please try again.',failed_assertion:'The Steam response did not pass validation. Please reconnect.',failed_steam:'Steam confirmation failed. Please try again in a moment.',failed_storage:'Steam verification completed, but the account could not be saved. Please retry.'};
   if(status){panel.open=true;message=statuses[status]||'';error=status!=='linked';history.replaceState(null,'',location.pathname)}
@@ -16,6 +16,7 @@
   const heroName=id=>heroNames[id]||'Hero '+(id||'unknown');
   const duration=seconds=>typeof seconds==='number'?Math.floor(Math.round(seconds)/60)+':'+String(Math.round(seconds)%60).padStart(2,'0'):'—';
   function draw(){
+    if(accountLoading){body.replaceChildren();summary.textContent='Loading your saved Steam account…';top.textContent='◉ Loading account…';return;}
     body.replaceChildren();
     summary.replaceChildren();
     const identity=el('span',undefined,'stats-identity',summary);el('span','MY PLAYER STATS','eyebrow',identity);el('strong',account?.dota?.name||(account?'Steam connected':'Connect your Steam account'),'',identity);
@@ -68,7 +69,7 @@
   async function signOut(){if(busy)return;await api('/api/session/logout','POST');if(window.localRivalPages){localStorage.removeItem('localrival-pages-session');location.href='./';}else location.href='/signout-with-chatgpt?return_to=%2Fleaderboard';}
   async function disconnect(){if(busy)return;if(!window.confirm('Disconnect Steam and remove your stored game data from Local Rival?'))return;busy=true;draw();try{await api('/api/steam/account','DELETE');account=null;message='Steam disconnected. Stored game data has been removed.';error=false}catch(e){message=e.message;error=true}finally{busy=false;draw();window.dispatchEvent(new Event("localrival-sync"))}}
   setInterval(updateRefreshControl,1000);
-  draw();Promise.all([api('/api/steam/account'),fetch('/dota-hero-names.json').then(r=>r.json()).catch(()=>({}))]).then(([data,names])=>{account=data.account;heroNames=names;draw();if(status==='linked'&&account)sync()}).catch(e=>{message=e.message;error=true;draw()});
+  draw();Promise.all([api('/api/steam/account'),fetch('/dota-hero-names.json').then(r=>r.json()).catch(()=>({}))]).then(([data,names])=>{accountLoading=false;account=data.account;heroNames=names;draw();if(status==='linked'&&account)sync()}).catch(e=>{accountLoading=false;message=e.message;error=true;draw()});
 })();
 
 

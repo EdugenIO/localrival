@@ -26,5 +26,5 @@ jobs:
         env:
           FORCE_SYNC: ${{ inputs.force || false }}
           NIGHTLY_SYNC_TOKEN: ${{ secrets.NIGHTLY_SYNC_TOKEN }}
-          SITE_ORIGIN: https://local-rival-brett.stony-fir-8901.chatgpt.site
+          SITE_ORIGIN: ${{ vars.API_ORIGIN || 'https://local-rival-brett.stony-fir-8901.chatgpt.site' }}
         run: node scripts/nightly-dota.mjs

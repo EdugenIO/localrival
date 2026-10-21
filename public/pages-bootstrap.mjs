@@ -1,4 +1,4 @@
-const backend='https://local-rival-brett.stony-fir-8901.chatgpt.site';
+const backend='__LOCALRIVAL_API_ORIGIN__';
 const key='localrival-pages-session';const nativeFetch=window.fetch.bind(window);
 const hex=bytes=>[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');
 window.localRivalPages=true;
