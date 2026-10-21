@@ -56,8 +56,8 @@
     try{
       const id=(BigInt(account.steamId)-76561197960265728n).toString();
       async function read(path){const r=await fetch('https://api.opendota.com/api/players/'+id+path,{credentials:'omit',redirect:'error',headers:{Accept:'application/json'},signal:AbortSignal.timeout(20000)});if(r.status===429){browserRetryAt=Date.now()+600000;throw new Error('OpenDota is also limiting this browser. Please wait for the profile-sync countdown.')}if(!r.ok)throw new Error('OpenDota could not load this profile (HTTP '+r.status+').');return r.json()}
-      const projects=['gold_per_min','xp_per_min','last_hits','hero_damage','hero_healing','tower_damage'].map(p=>'&project='+p).join('');
-      const [profile,matches,totals]=await Promise.all([read('').catch(()=>null),read('/matches?significant=0&limit=50'+projects),read('/wl?significant=0').catch(()=>null)]);
+      const {dotaMatchesPath}=await import('/opendota-request.mjs');
+      const [profile,matches,totals]=await Promise.all([read('').catch(()=>null),read(dotaMatchesPath()),read('/wl?significant=0').catch(()=>null)]);
       const r=await fetch('/api/dota/browser-sync',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({steamId:account.steamId,accountId:id,profile,matches,totals})});const data=await r.json();if(!r.ok){if(data.account)account=data.account;throw new Error(data.error||'Could not save your profile.')}account=data.account;message='OpenDota profile synced: '+account.dota.matches.length+' matches available. Turbo and normal matches are included.';
     }catch(e){message=e.message;error=true}finally{busy=false;draw()}
   }

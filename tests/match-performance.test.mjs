@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fetchDota,normalizeDota} from '../lib/game-data.mjs';
 import {matchPerformance,dotaMode} from '../lib/match-performance.mjs';
+import {dotaMatchesPath} from '../public/opendota-request.mjs';
 const steamId='76561198000000001';
 const fixture=(id,game_mode,lobby_type,win=true,extra={})=>({match_id:id,player_slot:0,radiant_win:win,kills:4,deaths:2,assists:8,start_time:id,game_mode,lobby_type,...extra});
 test('requests every available mode, includes Turbo and normal, and needs no ranked profile',async()=>{
@@ -40,4 +41,9 @@ test('unknown modes are retained and labels preserve Turbo precedence',()=>{
 test('profile overview keeps missing replay metrics distinct from zero and separates recorded totals',()=>{
   const d=normalizeDota({profile:{personaname:'Player'}},[fixture(1,23,0,true,{hero_id:27,gold_per_min:0}),fixture(2,23,0,false,{hero_id:27,gold_per_min:null}),fixture(3,22,0,true,{hero_id:5,gold_per_min:500})],{win:32,lose:35});
   assert.equal(d.lifetime.matches,67);assert.equal(d.matches.length,3);assert.equal(d.averages.goldPerMinute.value,250);assert.equal(d.averages.goldPerMinute.samples,2);assert.equal(d.averages.heroDamage,null);assert.deepEqual(d.heroes[0],{id:27,matches:2,wins:1});
+});
+test('requesting advanced stats preserves the hero, time, mode and KDA projections',()=>{
+  const url=new URL(dotaMatchesPath(),'https://api.opendota.com');
+  const fields=url.searchParams.getAll('project');
+  for(const field of ['hero_id','start_time','duration','game_mode','lobby_type','kills','deaths','assists','leaver_status','gold_per_min','xp_per_min'])assert.ok(fields.includes(field),field);
 });

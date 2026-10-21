@@ -6,7 +6,7 @@ import {Miniflare} from 'miniflare';
 for(const adapter of ['steam','dota','cs'])test(adapter+' uses request options supported by the deployed Worker runtime',async()=>{
   const helper=readFileSync(new URL('../lib/steam-openid.mjs',import.meta.url),'utf8').replace(/^export /gm,'');
   const games=readFileSync(new URL('../lib/game-data.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
-  const worker=new Miniflare({modules:true,compatibilityDate:'2026-05-15',script:helper+readFileSync(new URL('../lib/match-performance.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+games+`
+  const worker=new Miniflare({modules:true,compatibilityDate:'2026-05-15',script:helper+readFileSync(new URL('../lib/match-performance.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+readFileSync(new URL('../public/opendota-request.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+games+`
     export default {async fetch(){
       try {
         const provider=async(url,options)=>{
