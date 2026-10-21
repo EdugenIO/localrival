@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { currentUser, database, getLink, json, publicLink, sameOrigin } from '../../../../lib/server';
-import { fetchDota, fetchCounterStrike, providerIssue } from '../../../../lib/game-data.mjs';
+import { fetchDota, providerIssue } from '../../../../lib/game-data.mjs';
 export const dynamic='force-dynamic';
 export async function POST(request:Request) {
   if(!sameOrigin(request))return json({error:'Invalid request origin'},403);
@@ -10,7 +10,7 @@ export async function POST(request:Request) {
   const gate=await database().prepare('UPDATE steam_links SET refresh_after=? WHERE user_id=? AND steam_id=? AND refresh_after<=? RETURNING steam_id').bind(now+60000,user.userId,link.steam_id,now).first();
   if(!gate)return json({error:'Please wait one minute between refreshes.',account:publicLink(link)},429);
   const secrets=env as Cloudflare.Env & {STEAM_WEB_API_KEY?:string;OPENDOTA_API_KEY?:string};
-  const values=await Promise.allSettled([fetchDota(link.steam_id,undefined,{apiKey:secrets.OPENDOTA_API_KEY}),fetchCounterStrike(link.steam_id,secrets.STEAM_WEB_API_KEY)]);
+  const values=await Promise.allSettled([fetchDota(link.steam_id,undefined,{apiKey:secrets.OPENDOTA_API_KEY})]);
   const errors:string[]=[];
   const providerStatus:Record<string,unknown>={};
   let refreshAfter=now+60000;
@@ -25,6 +25,6 @@ export async function POST(request:Request) {
     if(old){const saved=JSON.parse(old);return {...saved,notice:saved.status==='error'?issue.message:saved.notice,syncIssue:issue};}
     return {source:issue.source,status:'error',matches:[],performance:null,winRate:null,notice:issue.message,syncIssue:issue};
   });
-  await database().prepare('UPDATE steam_links SET dota_data=?,cs_data=?,synced_at=?,refresh_after=? WHERE user_id=? AND steam_id=?').bind(data[0]?JSON.stringify(data[0]):null,data[1]?JSON.stringify(data[1]):null,Date.now(),refreshAfter,user.userId,link.steam_id).run();
+  await database().prepare('UPDATE steam_links SET dota_data=?,synced_at=?,refresh_after=? WHERE user_id=? AND steam_id=?').bind(data[0]?JSON.stringify(data[0]):null,Date.now(),refreshAfter,user.userId,link.steam_id).run();
   return json({account:publicLink(await getLink(user.userId)),errors,providerStatus});
 }

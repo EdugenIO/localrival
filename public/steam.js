@@ -30,7 +30,7 @@
       const link=el('a','View on Steam ↗','',id);link.href='https://steamcommunity.com/profiles/'+account.steamId;link.target='_blank';link.rel='noopener noreferrer';
       const grid=el('div',undefined,'live-grid');
       const dota=el('article',undefined,'live-card',grid);el('div','DOTA 2 / OPENDOTA','eyebrow',dota);
-      browserControl=button('Sync OpenDota profile',syncBrowser,dota);el('small','Load your public profile through this browser when server refresh is unavailable.','freshness',dota);
+      browserControl=button('Sync OpenDota profile',syncBrowser,dota);el('small','Sync now, or leave it to the nightly refresh at 2:00 am Perth time.','freshness',dota);
       const profileLink=el('a','Open your OpenDota profile ↗','profile-link',dota);profileLink.href='https://www.opendota.com/players/'+(BigInt(account.steamId)-76561197960265728n).toString();profileLink.target='_blank';profileLink.rel='noopener noreferrer';
       if(account.dota){const d=account.dota,p=d.performance;el('h3',d.name||'Dota player','',dota);
         if(d.lifetime){const l=d.lifetime;el('p','All recorded modes: '+l.matches+' matches · '+l.wins+' wins · '+l.losses+' losses'+(l.winRate!==null?' · '+l.winRate+'% wins':''),'recorded-total',dota)}
@@ -48,8 +48,6 @@
           if(!visible.length){const row=el('tr',undefined,'',body);const td=el('td','No matches of this type in the current window.','',row);td.colSpan=7}
         }
       }else {el('h3','Every match can count.','',dota);el('p','Collect the latest 50 available matches: Turbo, normal, ranked and other recorded modes.','',dota);el('small','3 base points for a win or 1 for a completed loss, plus up to 3 KDA bonus points. No MMR or rank medal needed.','',dota)}
-      const cs=el('article',undefined,'live-card',grid);el('div','COUNTER-STRIKE / STEAM','eyebrow',cs);el('h3','Counter-Strike 2 / CS:GO','',cs);
-      if(account.cs){const c=account.cs;el('p',c.status==='ok'?'Available cumulative stats':c.status==='error'?'Stats unavailable':'Awaiting data connection','',cs);el('small',c.notice,'',cs);if(c.stats){const labels={total_kills:'Kills',total_deaths:'Deaths',total_matches_played:'Matches played',total_wins:'Wins',total_rounds_played:'Rounds',total_kills_headshot:'Headshot kills'};for(const [k,label]of Object.entries(labels))if(typeof c.stats[k]==='number')el('p',label+': '+c.stats[k].toLocaleString(),'',cs)}const checked=c.fetchedAt||c.syncIssue?.checkedAt;if(checked)el('small','Checked '+new Date(checked).toLocaleString(),'freshness',cs);if(c.syncIssue&&c.fetchedAt)el('small','Showing saved data. '+c.syncIssue.message,'',cs)}else el('p','Refresh to check Counter-Strike stats using the configured Steam connection.','',cs);
       el('p','Local points combine results and KDA performance; they do not adjust for role or opponent strength. Equal points per match across all modes. The community ladder uses opted-in players with self-declared postcodes.','steam-note');
     }
     if(message){const note=el('p',message,error?'steam-message error':'steam-message');note.setAttribute('role',error?'alert':'status')}

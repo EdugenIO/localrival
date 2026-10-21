@@ -15,3 +15,10 @@ Base schema: drizzle/0000_flashy_alex_power.sql. Ladder membership, locality and
 
 ## Testing
 Run node --experimental-vm-modules --test tests/*.test.mjs and the production build before deployment. Browser end-to-end sign-in needs a real Steam user and must be completed by the player.
+
+## Nightly Dota refresh
+GitHub Actions workflow `.github/workflows/nightly-dota.yml` runs at 18:00 UTC (02:00 Australia/Perth) daily and supports manual dispatch. It runs `scripts/nightly-dota.mjs` without installing dependencies. The same random `NIGHTLY_SYNC_TOKEN` must exist as a GitHub Actions secret and a secret Sites environment variable. Never commit it. `/api/jobs/dota` rejects ordinary users; this service credential is needed to list stale connected Steam accounts and write normalized provider records.
+
+Refresh accounts older than six hours. Read OpenDota from the GitHub runner with at least 1.1 seconds between requests and stop on rate limits. Keep saved data on errors or empty responses. A conditional update prevents overwriting a newer manual sync or recreating a disconnected account. The job paginates 100 accounts at a time. GitHub may delay scheduled jobs; it is not an exact-time guarantee. Ordinary users keep the manual browser sync fallback.
+
+Counter-Strike is hidden and no longer refreshed. Existing stored CS records are retained for a future return.

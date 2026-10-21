@@ -1,0 +1,24 @@
+name: Nightly Dota 2 refresh
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nightly-dota-refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Refresh connected players
+        env:
+          NIGHTLY_SYNC_TOKEN: ${{ secrets.NIGHTLY_SYNC_TOKEN }}
+          SITE_ORIGIN: https://local-rival-brett.stony-fir-8901.chatgpt.site
+        run: node scripts/nightly-dota.mjs
