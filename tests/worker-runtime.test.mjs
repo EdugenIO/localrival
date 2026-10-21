@@ -5,15 +5,15 @@ import {Miniflare} from 'miniflare';
 
 for(const adapter of ['steam','dota','cs'])test(adapter+' uses request options supported by the deployed Worker runtime',async()=>{
   const helper=readFileSync(new URL('../lib/steam-openid.mjs',import.meta.url),'utf8').replace(/^export /gm,'');
-  const games=readFileSync(new URL('../lib/game-data.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/m,'').replace(/^export /gm,'');
-  const worker=new Miniflare({modules:true,compatibilityDate:'2026-05-15',script:helper+games+`
+  const games=readFileSync(new URL('../lib/game-data.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
+  const worker=new Miniflare({modules:true,compatibilityDate:'2026-05-15',script:helper+readFileSync(new URL('../lib/match-performance.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+games+`
     export default {async fetch(){
       try {
         const provider=async(url,options)=>{
           // Native fetch constructs a Request from these options in production.
           new Request(url,options);
           if(String(url).includes('/openid/'))return new Response('is_valid:true\\n');
-          if(String(url).includes('/recentMatches'))return Response.json([]);
+          if(String(url).includes('/matches?'))return Response.json([]);
           if(String(url).includes('GetUserStats'))return Response.json({playerstats:{stats:[]}});
           return Response.json({profile:{personaname:'Runtime test'},rank_tier:35});
         };
@@ -26,3 +26,4 @@ for(const adapter of ['steam','dota','cs'])test(adapter+' uses request options s
   `});
   try{const response=await worker.dispatchFetch('http://localhost/');const text=await response.text();assert.equal(response.status,200,text)}finally{await worker.dispose()}
 });
+

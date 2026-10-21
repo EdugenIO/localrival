@@ -18,7 +18,10 @@ Configure `STEAM_WEB_API_KEY` as a secret via Sites runtime environment variable
 
 - No accounts or matches are fabricated in this connection flow. Existing sample leaderboard data remains separate.
 - Steam account ownership is verified through OpenID; location and game ownership are not verified by that assertion.
-- Public Dota rank medal is displayed as provided, never converted into an invented exact MMR.
+- Dota local points use the latest 50 available recorded matches: 3 per win, 1 per completed loss, and 0 for a match the player left (`leaver_status >= 2`). All modes receive equal points per match; fewer than 10 scored matches is an early sample. This is a results/participation score, not an opponent-adjusted skill estimate.
+- Request `/players/{account_id}/matches?significant=0&limit=50` without game-mode or ranked-lobby filters. Store game and lobby mode on each record, deduplicate by match ID and show a mode filter plus breakdown. Turbo, normal, ranked and any other modes OpenDota returns are included. Provider coverage is not guaranteed for private games or every custom mode.
+- A missing profile or rank medal does not prevent loading valid match history. No MMR or medal is required or displayed for scoring. An empty match response has no assigned score.
+- The local geographic ladder remains explicitly labelled sample data; its demo values now use the same points formula. Connected Steam data stays separate until location and multi-player leaderboard persistence are implemented.
 - Steam stats may include legacy CS:GO totals. Do not use them as a current competitive rating.
 - No automatic schedule is enabled. Refresh is on demand and on a successful new connection.
 - The account link is unique per Steam ID. Switching linked accounts clears previous cached stats.
