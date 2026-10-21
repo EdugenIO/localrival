@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '0 18 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: Refresh even recently synced players
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -19,6 +24,7 @@ jobs:
           node-version: '22'
       - name: Refresh connected players
         env:
+          FORCE_SYNC: ${{ inputs.force || false }}
           NIGHTLY_SYNC_TOKEN: ${{ secrets.NIGHTLY_SYNC_TOKEN }}
           SITE_ORIGIN: https://local-rival-brett.stony-fir-8901.chatgpt.site
         run: node scripts/nightly-dota.mjs
