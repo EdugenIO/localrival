@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { currentUser, database, getLink, json, publicLink, sameOrigin } from '../../../../lib/server';
-import { fetchDota, fetchCounterStrike } from '../../../../lib/game-data.mjs';
+import { fetchDota, fetchCounterStrike, providerIssue } from '../../../../lib/game-data.mjs';
 export const dynamic='force-dynamic';
 export async function POST(request:Request) {
   if(!sameOrigin(request))return json({error:'Invalid request origin'},403);
@@ -11,12 +11,17 @@ export async function POST(request:Request) {
   if(!gate)return json({error:'Please wait one minute between refreshes.',account:publicLink(link)},429);
   const values=await Promise.allSettled([fetchDota(link.steam_id),fetchCounterStrike(link.steam_id,(env as Cloudflare.Env & {STEAM_WEB_API_KEY?:string}).STEAM_WEB_API_KEY)]);
   const errors:string[]=[];
+  const providerStatus:Record<string,unknown>={};
   const data=values.map((result,i)=>{
-    if(result.status==='fulfilled')return {...result.value,fetchedAt:Date.now()};
-    errors.push(i===0?'Dota 2 could not refresh. Public match data may be disabled, or OpenDota may be unavailable.':'Counter-Strike could not refresh. Steam stats may be private or the provider may be unavailable.');
+    const game=i===0?'dota':'cs';
+    if(result.status==='fulfilled'){providerStatus[game]={status:'ok'};return {...result.value,syncIssue:null,fetchedAt:Date.now()};}
+    const issue=providerIssue(result.reason,game);
+    providerStatus[game]=issue;
+    errors.push(issue.message);
     const old=i===0?link.dota_data:link.cs_data;
-    return old?JSON.parse(old):null;
+    if(old)return {...JSON.parse(old),syncIssue:issue};
+    return {source:issue.source,status:'error',matches:[],performance:null,winRate:null,notice:issue.message,syncIssue:issue};
   });
   await database().prepare('UPDATE steam_links SET dota_data=?,cs_data=?,synced_at=? WHERE user_id=? AND steam_id=?').bind(data[0]?JSON.stringify(data[0]):null,data[1]?JSON.stringify(data[1]):null,Date.now(),user.userId,link.steam_id).run();
-  return json({account:publicLink(await getLink(user.userId)),errors});
+  return json({account:publicLink(await getLink(user.userId)),errors,providerStatus});
 }
