@@ -13,3 +13,5 @@
 .steam-panel[open]>.stats-summary{border-bottom:1px solid #39482e}.steam-panel[open] .stats-chevron{transform:rotate(180deg)}
 .stats-content{padding:25px}
 @media(max-width:750px){.steam-panel{padding:0}.stats-summary{padding:16px;gap:12px}.stats-content{padding:16px}.stats-preview{flex-direction:column;align-items:flex-end;gap:7px;font-size:10px}.stats-identity strong{font-size:14px}.stats-prompt{font-size:10px}}
+
+.points-example{margin:20px 0;padding:18px;border:1px solid #526b36;border-radius:6px;background:#c4f56c08}.points-example h3{margin:0 0 12px;color:var(--lime)}.points-example strong{color:#e5f4d5}.points-example ol{padding-left:20px}.points-example li{margin:12px 0;line-height:1.7}.points-example p:last-child{margin-bottom:0}
