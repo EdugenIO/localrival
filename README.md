@@ -39,3 +39,9 @@ Issues and pull requests are welcome. Keep credentials and real player records o
 ## Licence
 
 Local Rival's original code is MIT-licensed; see [LICENSE](LICENSE). Dependencies, vendor files and reference data retain their own terms. Valve and OpenDota are not affiliated with or endorsing this project.
+
+### League profile trial
+
+The League of Legends button opens a Riot ID and region search. The server reads OP.GG public JSON-LD profile metadata and recent matches, with a 15-minute bounded cache, request limits, fixed upstream URLs, timeout and response-size limits. No OP.GG login or API credentials are used. Source retrieval time and OP.GG update time are distinct. Missing or changed metadata returns an error rather than a guessed profile.
+
+Anyone can preview. Existing Local Rival Steam sessions can save one private tracked profile per account in PostgreSQL (`league_profiles`); a tracked profile is not proof of Riot account ownership. Deleting the Local Rival account removes it. This trial does not publish League players to a ladder, award custom points, or perform nightly League refreshes. Riot Sign On and production ladder design remain separate future work. OP.GG attribution and Riot disclaimer appear in the dialog.

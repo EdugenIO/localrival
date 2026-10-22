@@ -17,6 +17,7 @@ async function setup(externalDb){
   const db={prepare(text){let args=[];return {bind(...values){args=values;return this},async all(){return {results:sql.prepare(text).all(...args)}},async first(){return sql.prepare(text).get(...args)||null},async run(){return sql.prepare(text).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}};
   const context=vm.createContext({console,URL,URLSearchParams,TextEncoder,TextDecoder,Uint8Array,crypto,Request,Response,Headers,AbortSignal,Date,process:{env:{NODE_ENV:'production'}},fetch:async(url,options)=>{
     session.calls++;const target=String(url);
+    if(target.startsWith('https://op.gg/lol/summoners/'))return new Response('<script type="application/ld+json">'+JSON.stringify({'@graph':[{'@type':'Person',name:'Test Player#OC'}]})+'</script>',{headers:{'Content-Type':'text/html'}});
     if(target===STEAM_ENDPOINT){assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('is_valid:'+session.steamValid+'\n')}
     if(target.includes('opendota')){if(target.includes('/matches?')&&session.beforeMatches)await session.beforeMatches();if(target.includes('/matches?')&&session.emptyDota)return Response.json([]);if(session.rateLimited)return new Response('',{status:429,headers:{'Retry-After':'300'}});if(session.failDota)return new Response('',{status:503});return Response.json(target.includes('/matches?')?[{match_id:1,player_slot:0,radiant_win:true,kills:1,deaths:0,assists:2}]:{profile:{personaname:'Alice'},rank_tier:43})}
     throw new Error('Unexpected external request');
@@ -234,4 +235,16 @@ test('suburb visibility defaults private, needs a boolean opt-in, and can be rev
  assert.equal((await save({showSuburb:false})).status,200);assert.equal((await publicRead()).locationLabel,'Western Australia, Australia');
  h.sql.prepare('DELETE FROM ladder_privacy').run();assert.equal((await publicRead()).locationLabel,'Western Australia, Australia');
  await save({showSuburb:true});await ladder.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM ladder_privacy').get().n,0);
+});
+
+test('League previews remain private, require sign-in to save, and persist per user',async()=>{
+ const h=await setup(),route=await h.route('league/profile');
+ const req=(action='preview',origin=SITE_ORIGIN)=>new Request(SITE_ORIGIN+'/api/league/profile',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({action,riotId:'Test Player#OC',region:'oce'})});
+ assert.equal((await route.POST(req('save','https://evil.example'))).status,403);
+ h.session.user=null;assert.equal((await route.POST(req('save'))).status,401);
+ const preview=await route.POST(req());assert.equal(preview.status,200);assert.equal((await preview.json()).profile.ownershipVerified,false);
+ h.session.user={userId:'alice'};assert.equal((await route.POST(req('save'))).status,200);assert.equal((await (await route.GET()).json()).profile.riotId,'Test Player#OC');
+ h.session.user={userId:'bob'};assert.equal((await (await route.GET()).json()).profile,null);
+ h.session.user={userId:'alice'};await route.DELETE(new Request(SITE_ORIGIN+'/api/league/profile',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await (await route.GET()).json()).profile,null);
+ await (await h.route('leaderboard')).GET();assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM ladder_members').get().n,0);
 });

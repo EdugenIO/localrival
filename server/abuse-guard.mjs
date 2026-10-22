@@ -38,6 +38,7 @@ export class TokenBucket {
 export function createAbuseGuard({trustedProxyHops = 0, now = Date.now} = {}) {
   const buckets = {
     login: new TokenBucket({capacity: 5, refillPerSecond: 1 / 12, now}),
+    league: new TokenBucket({capacity: 4, refillPerSecond: 1 / 15, now}),
     api: new TokenBucket({capacity: 60, refillPerSecond: 1, now}),
     globalLogin: new TokenBucket({capacity: 30, refillPerSecond: 1, maxKeys: 1, now}),
     globalApi: new TokenBucket({capacity: 600, refillPerSecond: 10, maxKeys: 1, now}),
@@ -45,6 +46,7 @@ export function createAbuseGuard({trustedProxyHops = 0, now = Date.now} = {}) {
   return (request, pathname) => {
     if (!pathname.startsWith('/api/')) return {allowed: true, retryAfter: 0};
     const login = pathname === '/api/steam/start';
+    if(pathname==='/api/league/profile'&&request.method==='POST'){const quota=buckets.league.consume(clientKey(request,trustedProxyHops));if(!quota.allowed)return quota;}
     const individual = buckets[login ? 'login' : 'api'].consume(clientKey(request, trustedProxyHops));
     if (!individual.allowed) return individual;
     return buckets[login ? 'globalLogin' : 'globalApi'].consume('all');
