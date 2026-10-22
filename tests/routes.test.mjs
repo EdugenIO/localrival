@@ -126,13 +126,11 @@ test('nightly writer requires its secret, selects stale accounts, and preserves 
  const empty={...payload,expectedFetchedAt:saved.fetchedAt,matches:[]};await route.POST(request(empty));assert.equal(JSON.parse(h.sql.prepare('SELECT dota_data FROM steam_links').get().dota_data).matches.length,1);
 });
 
-test('Pages Steam login uses a one-use browser-bound handoff and bearer session',async()=>{
- const h=await setup();h.session.user=null;const verifier='b'.repeat(64);const challenge=await (await import('../lib/steam-openid.mjs')).hashState(verifier);
- const startRoute=await h.route('steam/start');const response=await startRoute.GET(new Request(SITE_ORIGIN+'/api/steam/start?frontend=pages&challenge='+challenge));const location=response.headers.get('location');const returnTo=new URL(location).searchParams.get('openid.return_to');const state=new URL(returnTo).searchParams.get('state');const ret=await h.route('steam/return');const signedIn=await ret.GET(callback(location,state));const target=new URL(signedIn.headers.get('location'));assert.equal(target.origin,'https://edugenio.github.io');assert.equal(target.pathname,'/localrival/');const code=new URLSearchParams(target.hash.slice(1)).get('steam_ticket');assert.ok(code);
- const exchange=await h.route('session/exchange');const request=(v=verifier,origin='https://edugenio.github.io')=>new Request(SITE_ORIGIN+'/api/session/exchange',{method:'POST',headers:{Origin:origin},body:JSON.stringify({code,verifier:v})});
- assert.equal((await exchange.POST(request(verifier,'https://evil.example'))).status,403);assert.equal((await exchange.POST(request('c'.repeat(64)))).status,401);const issued=await exchange.POST(request());assert.equal(issued.status,200);const data=await issued.json();h.session.authorization='Bearer '+data.token;
- const account=await h.route('steam/account');assert.equal((await(await account.GET()).json()).account.steamId,'76561198000000001');assert.equal((await exchange.POST(request())).status,401);
- const logout=await h.route('session/logout');await logout.POST(new Request(SITE_ORIGIN+'/api/session/logout',{method:'POST',headers:{Origin:'https://edugenio.github.io'}}));assert.equal((await(await account.GET()).json()).account,null);
+test('retired Pages sign-in and token exchange cannot issue sessions',async()=>{
+ const h=await setup();h.session.user=null;
+ const startRoute=await h.route('steam/start');const response=await startRoute.GET(new Request(SITE_ORIGIN+'/api/steam/start?frontend=pages&challenge='+'b'.repeat(64)));
+ assert.equal(response.status,410);assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_attempts').get().n,0);
+ const exchange=await h.route('session/exchange');assert.equal((await exchange.POST(new Request(SITE_ORIGIN+'/api/session/exchange',{method:'POST',headers:{Origin:'https://edugenio.github.io'},body:JSON.stringify({code:'a'.repeat(64),verifier:'b'.repeat(64)})}))).status,410);
 });
 
 test('empty manual refresh retains populated verified history and ladder summary',async()=>{
@@ -150,13 +148,10 @@ test('a slow manual sync cannot overwrite a newer provider snapshot',async()=>{
  assert.equal(result.superseded,true);assert.equal(h.sql.prepare('SELECT dota_data FROM steam_links').get().dota_data,newer);
 });
 
-test('Pages cancelled and expired callbacks always return to the Pages frontend',async()=>{
- const h=await setup();h.session.user=null;const route=await h.route('steam/start');const response=await route.GET(new Request(SITE_ORIGIN+'/api/steam/start?frontend=pages&challenge='+'b'.repeat(64)));
- const location=response.headers.get('location');const returnTo=new URL(location).searchParams.get('openid.return_to');const state=new URL(returnTo).searchParams.get('state');
- const cb=new URL(returnTo);cb.searchParams.set('openid.mode','cancel');
- const result=await(await h.route('steam/return')).GET(new Request(cb,{headers:{cookie:STATE_COOKIE+'='+state}}));
- assert.equal(result.headers.get('location'),'https://edugenio.github.io/localrival/?steam=cancelled');
- const expired=await(await h.route('steam/return')).GET(new Request(cb));assert.equal(expired.headers.get('location'),'https://edugenio.github.io/localrival/?steam=expired');
+test('retired Pages callbacks cannot complete a login or create a handoff',async()=>{
+ const h=await setup();h.session.user=null;const ret=await h.route('steam/return');
+ const response=await ret.GET(new Request(SITE_ORIGIN+'/api/steam/return?frontend=pages&state='+'a'.repeat(64)));
+ assert.equal(response.headers.get('location'),SITE_ORIGIN+'/leaderboard.html?steam=expired');assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_links').get().n,0);
 });
 
 test('browser imports preserve an existing verified public score',async()=>{
@@ -201,10 +196,26 @@ test('the actual leaderboard route executes scoped fractional-score queries on P
    await db.prepare('INSERT INTO steam_links(user_id,steam_id,linked_at,leaderboard_data)VALUES(?,?,0,?)').bind(uid,id,JSON.stringify({name:uid,points,basePoints:3,performancePoints:points-3,eligibleMatches:1,wins:1,form:'W',fetchedAt:123,provisional:true})).run();
    await db.prepare('INSERT INTO ladder_members VALUES(?,?,?,?,0)').bind(uid,id,uid,postcode).run();await db.prepare('INSERT INTO ladder_places VALUES(?,?)').bind(uid,locality).run();
   }
+  pool.connect=async()=>({...pool,release(){}});
+  const startRoute=await h.route('steam/start');const login=await startRoute.GET(new Request(SITE_ORIGIN+'/api/steam/start'));assert.equal(login.status,303);
   const ladder=await h.route('leaderboard');
   for(const scope of ['postcode','city','state']){
    const response=await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope='+scope+'&postcode=6000&locality=Perth'));assert.equal(response.status,200);const data=await response.json();assert.deepEqual(data.players.map(p=>p.points),[4.7,4.2]);
   }
   const national=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=country'))).json();assert.equal(national.players[0].name,'carol');
  }finally{await pg.close()}
+});
+
+test('player authentication accepts only HttpOnly cookies, never a bearer header',async()=>{
+ const h=await setup();h.session.user=null;const a=await start(h);const signed=await(await h.route('steam/return')).GET(callback(a.location,a.state));const cookie=signed.headers.getSetCookie().find(c=>c.startsWith('__Host-lr-session=')).split(';')[0];
+ h.session.authorization='Bearer '+cookie.split('=')[1];const account=await h.route('steam/account');assert.equal((await(await account.GET()).json()).account,null);
+ h.session.cookie=cookie;assert.ok((await(await account.GET()).json()).account);
+ const response=await account.DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:'https://edugenio.github.io'}}));assert.equal(response.status,403);assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_links').get().n,1);
+});
+
+test('anonymous login attempts stop at the pending budget and resume after expiry',async()=>{
+ const h=await setup();h.session.user=null;
+ const insert=h.sql.prepare('INSERT INTO steam_attempts VALUES(?,?,?,?)');for(let i=0;i<1000;i++)insert.run('state'+i,'pending:'+i,'https://unused.test',Date.now()+600000);
+ const route=await h.route('steam/start');assert.equal((await route.GET()).status,429);assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_attempts').get().n,1000);
+ h.sql.prepare('UPDATE steam_attempts SET expires_at=0').run();assert.equal((await route.GET()).status,303);assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_attempts').get().n,1);
 });

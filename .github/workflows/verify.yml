@@ -22,3 +22,5 @@ jobs:
       - run: npm run build
       - run: node scripts/build-pages.mjs
       - run: npm audit --omit=dev --audit-level=moderate
+      - run: npm run security:audit
+      - run: node node_modules/drizzle-kit/bin.cjs export --config=drizzle.config.ts

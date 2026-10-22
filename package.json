@@ -15,7 +15,8 @@
     "build:render": "node scripts/build-render.mjs",
     "start:render": "node render-dist/server.mjs",
     "test": "node --experimental-vm-modules --test tests/*.test.mjs",
-    "typecheck": "tsc --noEmit --incremental false"
+    "typecheck": "tsc --noEmit --incremental false",
+    "security:audit": "node scripts/security-audit.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -72,6 +73,10 @@
   "overrides": {
     "miniflare": {
       "sharp": "0.35.5"
-    }
+    },
+    "@esbuild-kit/core-utils": {
+      "esbuild": "$esbuild"
+    },
+    "fflate": "0.7.5"
   }
 }
