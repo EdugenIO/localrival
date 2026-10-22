@@ -4,14 +4,15 @@ import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {createAbuseGuard} from './abuse-guard.mjs';
 const assets=new Map([
-  ['/','leaderboard.html'],['/leaderboard','leaderboard.html'],['/leaderboard.html','leaderboard.html'],
-  ...['app.js','league.js','onboarding.js','steam.js','style.css','steam.css','postcodes.json','dota-hero-names.json','opendota-request.mjs','favicon.svg'].map(name=>['/'+name,name]),
+  ['/privacy','privacy.html'],['/terms','terms.html'],['/privacy.html','privacy.html'],['/terms.html','terms.html'],['/','leaderboard.html'],['/leaderboard','leaderboard.html'],['/leaderboard.html','leaderboard.html'],
+  ...['policy.json','legal.css','app.js','league.js','onboarding.js','steam.js','style.css','steam.css','postcodes.json','dota-hero-names.json','opendota-request.mjs','favicon.svg'].map(name=>['/'+name,name]),
 ]);
 const types={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml'};
 
 export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot,canonicalAliases=/** @type {string[]} */ ([]),trustedProxyHops=0,abuseGuard=createAbuseGuard({trustedProxyHops})}) {
   const server=createServer(async(req,res)=>{
     try {
+      if((req.url||'').length>8192){res.writeHead(414,{'Cache-Control':'no-store'});res.end();return;}
       const url=new URL(req.url||'/',origin);
       const headers=new Headers();
       for(const [key,value] of Object.entries(req.headers)) {
@@ -21,6 +22,12 @@ export function createAppServer({origin,handlers,runRequest,healthCheck,staticRo
       }
 
       res.setHeader('X-Content-Type-Options','nosniff');
+      res.setHeader('Cross-Origin-Opener-Policy','same-origin');
+      res.setHeader('Cross-Origin-Resource-Policy','same-origin');
+      res.setHeader('Origin-Agent-Cluster','?1');
+      res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://shared.fastly.steamstatic.com; connect-src 'self' https://api.opendota.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'");
+      if(url.pathname.startsWith('/api/'))res.setHeader('Cache-Control','no-store');
+      if(url.pathname.startsWith('/api/')&&['POST','PUT','PATCH','DELETE'].includes(req.method)&&headers.get('sec-fetch-site')==='cross-site'){res.writeHead(403);res.end();return;}
       res.setHeader('Referrer-Policy','no-referrer');
       res.setHeader('X-Frame-Options','DENY');
       res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
@@ -42,11 +49,13 @@ export function createAppServer({origin,handlers,runRequest,healthCheck,staticRo
         const body=await readFile(resolve(staticRoot,asset));
         res.setHeader('Content-Type',types[asset.split('.').pop()]||'application/octet-stream');
         res.setHeader('Cache-Control','no-cache');
-        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://shared.fastly.steamstatic.com; connect-src 'self' https://api.opendota.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
         res.statusCode=200;res.end(req.method==='HEAD'?undefined:body);return;
       }
       const route=handlers[url.pathname];
       if(!route||!route[req.method]){res.writeHead(route?405:404);res.end();return}
+      const jsonOnly=['/api/leaderboard','/api/league/profile','/api/dota/browser-sync','/api/jobs/dota'];
+      if(req.method==='POST'&&jsonOnly.includes(url.pathname)&&headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json'){res.writeHead(415,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'Use application/json'}));return;}
+      if(Number(headers.get('content-length')||0)>210000){res.writeHead(413);res.end();return;}
       let body;
       if(!['GET','HEAD'].includes(req.method)) {
         const chunks=[];let size=0;

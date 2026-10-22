@@ -91,7 +91,7 @@ test('browser profile import limits input size before parsing',async()=>{
 test('live ladder requires opt-in, recalculates scores, hides account IDs and isolates membership',async()=>{
  const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));
  h.sql.prepare('UPDATE steam_links SET dota_data=?,leaderboard_data=? WHERE user_id=?').run(JSON.stringify({name:'Synced gamer',matches:[{won:true,abandoned:false},{won:false,abandoned:false},{won:true,abandoned:true}],performance:{points:99999},syncMethod:'server',leaderboardEligible:true,fetchedAt:123}),JSON.stringify({name:'Synced gamer',points:4,basePoints:4,performancePoints:0,eligibleMatches:2,wins:1,form:'WLA',fetchedAt:123,provisional:true}),'alice');
- const route=await h.route('leaderboard');const req=body=>new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const route=await h.route('leaderboard');const req=body=>new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify({publicConsent:true,termsVersion:'2026-10-22',...body})});
  assert.equal((await(await route.GET()).json()).players.length,0);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'abcd'}))).status,400);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'6000'}))).status,200);
@@ -158,7 +158,7 @@ test('retired Pages callbacks cannot complete a login or create a handoff',async
 test('browser imports preserve an existing verified public score',async()=>{
  const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));
  await(await h.route('games/sync')).POST(new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}}));
- const ladder=await h.route('leaderboard');await ladder.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({postcode:'6000'})}));
+ const ladder=await h.route('leaderboard');await ladder.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({publicConsent:true,termsVersion:'2026-10-22',postcode:'6000'})}));
  const before=(await(await ladder.GET()).json()).players[0];
  const matches=Array.from({length:50},(_,i)=>({match_id:1000+i,player_slot:0,radiant_win:true,kills:30,deaths:0,assists:30}));
  const response=await(await h.route('dota/browser-sync')).POST(new Request(SITE_ORIGIN+'/api/dota/browser-sync',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({steamId:'76561198000000001',accountId:'39734273',profile:{profile:{personaname:'Forged name'}},matches})}));
@@ -225,7 +225,7 @@ test('anonymous login attempts stop at the pending budget and resume after expir
 test('suburb visibility defaults private, needs a boolean opt-in, and can be revoked',async()=>{
  const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));
  await(await h.route('games/sync')).POST(new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}}));
- const ladder=await h.route('leaderboard');const save=body=>ladder.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({postcode:'6027',locality:'Joondalup',...body})}));
+ const ladder=await h.route('leaderboard');const save=body=>ladder.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({publicConsent:true,termsVersion:'2026-10-22',postcode:'6027',locality:'Joondalup',...body})}));
  assert.equal((await save({})).status,200);
  const own=await(await ladder.GET()).json();assert.equal(own.membership.showSuburb,false);assert.equal(own.membership.locality,'Joondalup');
  const publicRead=async()=>{h.session.user=null;const data=await(await ladder.GET()).json();h.session.user={userId:'alice'};assert.equal(data.membership,null);assert.equal(data.gamerName,null);const player=data.players[0];for(const key of ['postcode','locality','location','user_id','steam_id'])assert.equal(key in player,false);return player};
@@ -239,7 +239,7 @@ test('suburb visibility defaults private, needs a boolean opt-in, and can be rev
 
 test('League previews remain private, require sign-in to save, and persist per user',async()=>{
  const h=await setup(),route=await h.route('league/profile');
- const req=(action='preview',origin=SITE_ORIGIN)=>new Request(SITE_ORIGIN+'/api/league/profile',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({action,riotId:'Test Player#OC',region:'oce'})});
+ const req=(action='preview',origin=SITE_ORIGIN)=>new Request(SITE_ORIGIN+'/api/league/profile',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({action,termsVersion:'2026-10-22',riotId:'Test Player#OC',region:'oce'})});
  assert.equal((await route.POST(req('save','https://evil.example'))).status,403);
  h.session.user=null;assert.equal((await route.POST(req('save'))).status,401);
  const preview=await route.POST(req());assert.equal(preview.status,200);assert.equal((await preview.json()).profile.ownershipVerified,false);
@@ -247,4 +247,21 @@ test('League previews remain private, require sign-in to save, and persist per u
  h.session.user={userId:'bob'};assert.equal((await (await route.GET()).json()).profile,null);
  h.session.user={userId:'alice'};await route.DELETE(new Request(SITE_ORIGIN+'/api/league/profile',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await (await route.GET()).json()).profile,null);
  await (await h.route('leaderboard')).GET();assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM ladder_members').get().n,0);
+});
+
+test('public sharing and current policy acceptance are enforced on the server',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));h.sql.prepare('UPDATE steam_links SET dota_data=? WHERE user_id=?').run(JSON.stringify({name:'Alice'}),'alice');
+ const route=await h.route('leaderboard');const save=body=>route.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({postcode:'6000',...body})}));
+ for(const body of [{},{termsVersion:'2026-10-22'},{publicConsent:'true',termsVersion:'2026-10-22'},{publicConsent:true,termsVersion:'old'}])assert.equal((await save(body)).status,400);
+ assert.equal((await(await route.GET()).json()).players.length,0);
+ assert.equal((await save({publicConsent:true,termsVersion:'2026-10-22'})).status,200);
+ const row=h.sql.prepare('SELECT * FROM policy_acceptances WHERE user_id=?').get('alice');assert.equal(row.policy_version,'2026-10-22');assert.equal(row.purpose,'public-ladder');assert.ok(row.accepted_at>0);
+ const league=await h.route('league/profile');const calls=h.session.calls;const rejected=await league.POST(new Request(SITE_ORIGIN+'/api/league/profile',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({action:'save',riotId:'Test Player#OC',region:'oce'})}));assert.equal(rejected.status,400);assert.equal(h.session.calls,calls);
+});
+test('account export is private, omits credentials and deletion removes policy and League records',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));const league=await h.route('league/profile');await league.POST(new Request(SITE_ORIGIN+'/api/league/profile',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({action:'save',riotId:'Test Player#OC',region:'oce',termsVersion:'2026-10-22'})}));
+ const route=await h.route('account/export');h.session.user=null;assert.equal((await route.GET()).status,401);
+ h.session.user={userId:'bob'};const other=await(await route.GET()).json();assert.equal(other.steam,null);assert.equal(other.league,null);assert.equal(other.policyAcceptances.length,0);
+ h.session.user={userId:'alice'};const response=await route.GET();assert.match(response.headers.get('content-disposition'),/attachment/);assert.equal(response.headers.get('cache-control'),'no-store');const data=await response.json();assert.equal(data.league.riotId,'Test Player#OC');assert.equal(data.policyAcceptances.length,1);assert.equal(JSON.stringify(data).includes('token_hash'),false);
+ await(await h.route('steam/account')).DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM policy_acceptances').get().n,0);assert.equal(h.sql.prepare('SELECT COUNT(*) AS n FROM league_profiles').get().n,0);
 });

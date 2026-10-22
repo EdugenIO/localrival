@@ -3,6 +3,7 @@ import {env} from './shims/env';
 import {requestContext} from './shims/context';
 import {createPool,databaseAdapter,initialize} from './postgres.mjs';
 import {createAppServer} from './http.mjs';
+import * as accountExport from '../app/api/account/export/route';
 import * as account from '../app/api/steam/account/route';
 import * as start from '../app/api/steam/start/route';
 import * as callback from '../app/api/steam/return/route';
@@ -18,7 +19,7 @@ if(!origin||new URL(origin).origin!==origin||new URL(origin).protocol!=='https:'
 const pool=createPool(process.env.DATABASE_URL);
 await initialize(pool);
 env.DB=databaseAdapter(pool);
-const handlers={'/api/league/profile':leagueProfile,'/api/steam/account':account,'/api/steam/start':start,'/api/steam/return':callback,'/api/session/exchange':exchange,'/api/session/logout':logout,'/api/leaderboard':leaderboard,'/api/games/sync':sync,'/api/dota/browser-sync':browserSync,'/api/jobs/dota':nightly};
+const handlers={'/api/account/export':accountExport,'/api/league/profile':leagueProfile,'/api/steam/account':account,'/api/steam/start':start,'/api/steam/return':callback,'/api/session/exchange':exchange,'/api/session/logout':logout,'/api/leaderboard':leaderboard,'/api/games/sync':sync,'/api/dota/browser-sync':browserSync,'/api/jobs/dota':nightly};
 const server=createAppServer({origin,handlers,runRequest:(request:Request,action:()=>Promise<Response>)=>requestContext.run(request,action),healthCheck:()=>pool.query('SELECT 1'),staticRoot:resolve('render-dist/public'),canonicalAliases:process.env.RENDER_EXTERNAL_URL&&origin!==process.env.RENDER_EXTERNAL_URL?[new URL(process.env.RENDER_EXTERNAL_URL).host]:[],trustedProxyHops:process.env.RENDER_EXTERNAL_URL?1:0});
 server.listen(Number(process.env.PORT||10000),'0.0.0.0',()=>console.log('Local Rival ready'));
 process.on('SIGTERM',()=>{server.close(()=>{pool.end().finally(()=>process.exit(0))})});

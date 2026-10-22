@@ -1,3 +1,4 @@
+import {POLICY_VERSION,prepareConsent,consentStatement} from '../../../../lib/policy-consent';
 import {currentUser,database,json,sameOrigin} from '../../../../lib/server';
 import {leagueIdentity,fetchLeagueProfile} from '../../../../lib/league-profile.mjs';
 export const dynamic='force-dynamic';
@@ -5,13 +6,15 @@ export async function prepareLeague(){await database().prepare('CREATE TABLE IF 
 export async function GET(){const user=await currentUser();if(!user)return json({profile:null,signedIn:false});await prepareLeague();const row=await database().prepare('SELECT snapshot FROM league_profiles WHERE user_id=?').bind(user.userId).first<{snapshot:string}>();return json({profile:row?JSON.parse(row.snapshot):null,signedIn:true})}
 export async function POST(request:Request){
  if(!sameOrigin(request))return json({error:'Invalid request origin'},403);
- let body:Record<string,unknown>;try{const value=await request.json();if(!value||typeof value!=='object'||Array.isArray(value))return json({error:'Invalid request'},400);body=value as Record<string,unknown>}catch{return json({error:'Invalid request'},400)}
+ if(Number(request.headers.get('content-length')||0)>4096)return json({error:'Request too large'},413);
+ let body:Record<string,unknown>;try{const text=await request.text();if(text.length>4096)return json({error:'Request too large'},413);const value=JSON.parse(text);if(!value||typeof value!=='object'||Array.isArray(value))return json({error:'Invalid request'},400);body=value as Record<string,unknown>}catch{return json({error:'Invalid request'},400)}
  if(!body||!['preview','save'].includes(String(body.action)))return json({error:'Invalid action'},400);
  const user=body.action==='save'?await currentUser():null;
  if(body.action==='save'&&!user)return json({error:'Sign in with Steam to save a tracked profile to your Local Rival account.'},401);
+ if(body.action==='save'&&body.termsVersion!==POLICY_VERSION)return json({error:'Please accept the current terms before saving a profile.'},400);
  let identity;try{identity=leagueIdentity(body.riotId,body.region)}catch(error){return json({error:(error as Error).message},400)}
  let profile;try{profile=await fetchLeagueProfile(identity)}catch{return json({error:'OP.GG could not provide this profile. Check the full Name#Tag and region, or try again later.'},502)}
- if(user){await prepareLeague();await database().prepare('INSERT INTO league_profiles (user_id,snapshot) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET snapshot=excluded.snapshot').bind(user.userId,JSON.stringify(profile)).run()}
+ if(user){await prepareLeague();await prepareConsent(database());await database().batch([consentStatement(database(),user.userId,'league-tracking'),database().prepare('INSERT INTO league_profiles (user_id,snapshot) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET snapshot=excluded.snapshot').bind(user.userId,JSON.stringify(profile))])}
  return json({profile});
 }
 export async function DELETE(request:Request){if(!sameOrigin(request))return json({error:'Invalid request origin'},403);const user=await currentUser();if(!user)return json({error:'Sign in required'},401);await prepareLeague();await database().prepare('DELETE FROM league_profiles WHERE user_id=?').bind(user.userId).run();return json({profile:null})}

@@ -9,3 +9,5 @@
 .setup-help{max-width:560px}.setup-help .outline{margin:8px 0 0 8px;color:var(--lime)}.info-dialog a{color:var(--lime)}@media(max-width:750px){aside nav #helpNav{display:block;padding:8px;font-size:10px;color:var(--lime);text-align:right}aside nav #infoNav{display:none}}
 
 .league-mode{display:block;font-size:10px;color:var(--muted);margin-top:5px}#leagueRemove{margin-top:12px}.info-dialog .table-wrap{max-height:300px}.info-dialog table{width:100%}#leagueTrial small{display:block;font-size:8px;margin-top:5px}@media(max-width:750px){.gamebar{flex-wrap:wrap;gap:10px}}
+
+.legal-links{display:flex;gap:16px;flex-wrap:wrap}.legal-links a,.onboarding-consent a{color:var(--lime)}footer{gap:15px;flex-wrap:wrap}.onboarding-consent input[type=checkbox]{width:18px;flex:none}

@@ -53,3 +53,16 @@ test('custom domain redirects only the configured old host and keeps health and 
   assert.equal((await fetchHost(base+'/api/echo',{method:'POST',headers:{Host:'localrivals.online',Origin:'https://localrivals.online'}})).status,200);assert.equal(calls,1);
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
 });
+
+test('legal pages, API security headers and request boundaries are enforced',async()=>{
+ let calls=0;const server=createAppServer({origin:'https://localrival.test',staticRoot:path.resolve('public'),healthCheck:async()=>{},runRequest:async(_,action)=>action(),handlers:{'/api/league/profile':{POST:async()=>{calls++;return Response.json({ok:true})}},'/api/private':{GET:async()=>Response.json({ok:true})}}});
+ server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
+ try{
+ for(const route of ['/privacy','/terms']){const r=await fetch(base+route);assert.equal(r.status,200);assert.match(await r.text(),/admin@edugen.io/)}
+ const r=await fetch(base+'/api/private');assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.get('cross-origin-opener-policy'),'same-origin');assert.equal(r.headers.get('cross-origin-resource-policy'),'same-origin');assert.match(r.headers.get('content-security-policy'),/object-src 'none'/);
+ const blocked=await fetch(base+'/api/league/profile',{method:'POST',headers:{Origin:'https://localrival.test','Sec-Fetch-Site':'cross-site','Content-Type':'application/json'},body:'{}'});assert.equal(blocked.status,403);
+ assert.equal((await fetch(base+'/api/league/profile',{method:'POST',headers:{Origin:'https://localrival.test','Content-Type':'text/plain'},body:'{}'})).status,415);assert.equal(calls,0);
+ assert.equal((await fetch(base+'/api/league/profile',{method:'POST',headers:{Origin:'https://localrival.test','Content-Type':'application/json'},body:'{}'})).status,200);
+ assert.equal((await fetch(base+'/?q='+'x'.repeat(8200))).status,414);
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
+});

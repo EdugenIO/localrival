@@ -1,3 +1,4 @@
+import {POLICY_VERSION,prepareConsent,consentStatement} from '../../../lib/policy-consent';
 import {currentUser,database,getLink,json,sameOrigin} from '../../../lib/server';
 import {prepareLadder} from '../../../lib/ladder-store';
 import postcodeData from '../../../public/postcodes.json';
@@ -45,6 +46,7 @@ export async function POST(request:Request) {
   const link=await getLink(user.userId);if(!link)return json({error:'Connect Steam before joining a ladder.'},409);
   if(Number(request.headers.get('content-length')||0)>2048)return json({error:'Request too large'},413);
   let body;try{const text=await request.text();if(text.length>2048)return json({error:'Request too large'},413);body=JSON.parse(text)}catch{return json({error:'Invalid profile'},400)}
+  if(body?.publicConsent!==true||body?.termsVersion!==POLICY_VERSION)return json({error:'Please accept the current terms and confirm public ladder sharing.'},400);
   const postcode=typeof body?.postcode==='string'?body.postcode.trim():'';
   const location=place(postcode,body?.locality);
   if(!/^\d{4}$/.test(postcode)||!location||(body?.locality&&!postcodes[postcode].some(p=>p[0]===body.locality)))return json({error:'Enter a valid Australian postcode and choose its suburb/town.'},400);
@@ -52,8 +54,9 @@ export async function POST(request:Request) {
   let alias='';try{alias=JSON.parse(link.dota_data||'null')?.name?.trim()||''}catch{}
   if(!alias)return json({error:'Refresh game data first so we can use your verified gamer name.'},409);
   alias=alias.slice(0,80);
-  const db=database();await prepareLadder(db);
+  const db=database();await prepareLadder(db);await prepareConsent(db);
   await db.batch([
+    consentStatement(db,user.userId,'public-ladder'),
     db.prepare('INSERT INTO ladder_members (user_id,steam_id,alias,postcode,joined_at) VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET steam_id=excluded.steam_id,alias=excluded.alias,postcode=excluded.postcode').bind(user.userId,link.steam_id,alias,postcode,Date.now()),
     db.prepare('INSERT INTO ladder_places (user_id,locality) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET locality=excluded.locality').bind(user.userId,location[0]),
     db.prepare('INSERT INTO ladder_privacy (user_id,show_suburb) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET show_suburb=excluded.show_suburb').bind(user.userId,body.showSuburb===true?1:0),

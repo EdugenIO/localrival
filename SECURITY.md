@@ -2,7 +2,7 @@
 
 ## Current production boundary
 
-The primary application is https://localrival-api.onrender.com/. GitHub Pages only redirects there. Player authentication accepts Secure/HttpOnly/SameSite=Lax cookies, not bearer headers. Retired Pages login, callback and token exchange paths cannot create handoffs or expose session tokens. Cross-origin API mutations and cross-origin preflights are rejected; the Render and retained Worker adapters no longer grant Pages CORS access. The job endpoint keeps its separate service credential.
+The primary application is https://localrivals.online/. GitHub Pages only redirects there. Player authentication accepts Secure/HttpOnly/SameSite=Lax cookies, not bearer headers. Retired Pages login, callback and token exchange paths cannot create handoffs or expose session tokens. Cross-origin API mutations and cross-origin preflights are rejected; the Render and retained Worker adapters no longer grant Pages CORS access. The job endpoint keeps its separate service credential.
 
 Render applies no-referrer, frame denial, HSTS on HTTPS, a restrictive permissions policy, and the existing Content Security Policy. Request reception and headers have time limits. No credential or player-record migration/deletion is part of this release.
 
@@ -45,3 +45,11 @@ The eight remaining development-only package entries all trace to [GHSA-vfj7-8cj
 ## Audit service outages
 
 Both CI audit scopes use `scripts/security-audit.mjs`. Registry/network failures receive at most three attempts. npm fetch retries are disabled inside each attempt, individual fetches time out after 8 seconds, and the subprocess is limited to 22 seconds. A valid vulnerability report is evaluated immediately without retrying it. Authentication failures and malformed reports fail immediately; exhausted network failures explicitly state that no security verdict is available and fail CI. Raw registry diagnostics are not echoed by the wrapper. The workflow also has a 15-minute job limit.
+
+## Privacy and security enforcement — 22 October 2026
+
+- Privacy and terms pages are served at `/privacy` and `/terms`; contact: admin@edugen.io. They describe the deployed data flows, location inference, essential cookies, providers, retention limitations and League trial.
+- Public ladder writes require a boolean public-sharing opt-in and the current policy version; League private saves require the current version. The database transaction records acceptance purpose/version/time with the profile write. Existing records are not labelled as retroactively accepted.
+- Cookie-authenticated `/api/account/export` downloads only the caller's game snapshots, location, tracked League profile and policy acceptances; session credentials are excluded. Account deletion also removes policy and League rows. Provider records, backups and infrastructure logs are outside this active-database deletion.
+- Every Render response receives frame, resource, opener and MIME protections and CSP with `object-src 'none'`. API responses default to `no-store`. Cross-site browser mutation metadata is rejected in addition to exact-origin checks. Data-writing POST routes require JSON. URLs are capped at 8 KiB and bodies at 210,000 bytes; League requests are additionally capped at 4,096 characters in the route.
+- These are server checks, not browser-only validations. Provider keys, job secrets and database credentials remain environment settings; never hard-code credentials. The instance-local rate limiter and hosting/backups limitations above still apply.
