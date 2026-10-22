@@ -41,3 +41,7 @@ The eight remaining development-only package entries all trace to [GHSA-vfj7-8cj
 ## Verification
 
 67 automated tests pass, covering cookie-only authentication, retired auth paths, cross-origin rejection, throttling and retry headers, spoofed forwarding prefixes, bounded limiter state, pending-attempt admission/expiry, PostgreSQL-backed routes, and audit-policy failures. TypeScript, ESLint, Render/Worker builds and Drizzle SQL export pass. Real interactive Steam sign-in remains a separate player check.
+
+## Audit service outages
+
+Both CI audit scopes use `scripts/security-audit.mjs`. Registry/network failures receive at most three attempts. npm fetch retries are disabled inside each attempt, individual fetches time out after 8 seconds, and the subprocess is limited to 22 seconds. A valid vulnerability report is evaluated immediately without retrying it. Authentication failures and malformed reports fail immediately; exhausted network failures explicitly state that no security verdict is available and fail CI. Raw registry diagnostics are not echoed by the wrapper. The workflow also has a 15-minute job limit.
