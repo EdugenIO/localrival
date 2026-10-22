@@ -9,7 +9,7 @@ const assets=new Map([
 ]);
 const types={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml'};
 
-export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot,trustedProxyHops=0,abuseGuard=createAbuseGuard({trustedProxyHops})}) {
+export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot,canonicalAliases=/** @type {string[]} */ ([]),trustedProxyHops=0,abuseGuard=createAbuseGuard({trustedProxyHops})}) {
   const server=createServer(async(req,res)=>{
     try {
       const url=new URL(req.url||'/',origin);
@@ -25,6 +25,10 @@ export function createAppServer({origin,handlers,runRequest,healthCheck,staticRo
       res.setHeader('X-Frame-Options','DENY');
       res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
       if(new URL(origin).protocol==='https:')res.setHeader('Strict-Transport-Security','max-age=31536000');
+      if(canonicalAliases.includes(req.headers.host)&&['GET','HEAD'].includes(req.method)&&url.pathname!=='/health') {
+        const destination=new URL(origin);destination.pathname=url.pathname;destination.search=url.search;
+        res.writeHead(308,{'Location':destination.href,'Cache-Control':'no-store'});res.end();return;
+      }
       if(req.method==='OPTIONS'){res.writeHead(headers.get('origin')===new URL(origin).origin?204:403);res.end();return}
       if(url.pathname.startsWith('/api/')&&['POST','DELETE','PUT','PATCH'].includes(req.method)&&!url.pathname.startsWith('/api/jobs/')&&headers.get('origin')!==new URL(origin).origin){res.writeHead(403,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'Invalid request origin'}));return}
       const quota=abuseGuard(req,url.pathname);

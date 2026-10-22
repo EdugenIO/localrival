@@ -29,3 +29,11 @@ Counter-Strike is hidden and no longer refreshed. Existing stored CS records are
 The main public frontend is https://edugenio.github.io/localrival/. `.github/workflows/pages.yml` builds the frontend from public/ with scripts/build-pages.mjs and deploys on main pushes. GitHub Pages hosts the actual static application, not a redirect. Account APIs, Steam OpenID verification, D1 data and nightly writes stay on the Sites backend.
 
 Pages uses bearer sessions so third-party cookie blocking does not prevent API requests. A random browser verifier is stored in sessionStorage before Steam sign-in. Its hash is bound to the signed OpenID callback. The backend issues a two-minute one-use code returned in the Pages URL fragment; exchange requires the verifier and exact Pages origin. The exchange returns a 30-day session token stored on the Pages origin. Only session hashes are in the database. Sign-out revokes that token. CORS is allowed only for https://edugenio.github.io; other projects on that origin must be trusted.
+
+## Custom domain
+
+Production uses `localrivals.online`, with `www.localrivals.online` redirecting to the root domain in Render. VentraIP DNS: root A record `216.24.57.1`; www CNAME `localrival-api.onrender.com`; TTL 300 during cutover. Existing NS records remain unchanged.
+
+After Render verifies both domains and HTTPS is valid, set the non-secret `RUNTIME_SITE_ORIGIN=https://localrivals.online` on the existing Render service and deploy. This overrides the platform onrender URL for Steam OpenID callbacks and same-origin checks. The server redirects GET/HEAD requests on the old Render hostname to this fixed origin, preserving path/query, while /health stays available for readiness checks. Before the override is set, the old origin keeps working. Existing Steam accounts are retained; users sign in again on the new cookie origin.
+
+The service-level public-origin setting is managed in the Dashboard and is intentionally omitted from the Blueprint; Blueprint sync preserves omitted environment variables. Custom-domain associations are managed in the Dashboard. Do not remove or rotate database/provider/session credentials as part of a domain change.

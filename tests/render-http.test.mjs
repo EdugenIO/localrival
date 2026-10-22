@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {request as httpRequest} from 'node:http';
 import path from 'node:path';
 import {createAppServer} from '../server/http.mjs';
 
@@ -34,5 +35,21 @@ test('Render throttles repeated logins before database work and reports Retry-Af
  try {
   for(let i=0;i<5;i++)assert.equal((await fetch(base+'/api/steam/start',{redirect:'manual',headers:{'x-forwarded-for':'198.51.100.'+i}})).status,303);
   const limited=await fetch(base+'/api/steam/start',{redirect:'manual',headers:{'x-forwarded-for':'198.51.100.99'}});assert.equal(limited.status,429);assert.ok(Number(limited.headers.get('retry-after'))>0);assert.equal(calls,5);assert.equal(limited.headers.get('cache-control'),'no-store');
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
+});
+
+test('custom domain redirects only the configured old host and keeps health and origin checks intact',async()=>{
+ const fetchHost=(url,options={})=>new Promise((resolve,reject)=>{const request=httpRequest(url,{method:options.method||'GET',headers:options.headers},response=>{let body='';response.on('data',chunk=>body+=chunk);response.on('end',()=>resolve({status:response.statusCode,headers:new Headers(response.headers),json:async()=>JSON.parse(body)}))});request.on('error',reject);request.end()});
+ let calls=0;const server=createAppServer({origin:'https://localrivals.online',canonicalAliases:['localrival-api.onrender.com'],staticRoot:path.resolve('public'),healthCheck:async()=>{},runRequest:async(request,action)=>action(),handlers:{'/api/echo':{GET:async()=>Response.json({ok:true}),POST:async()=>{calls++;return Response.json({ok:true})}}}});
+ server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
+ try {
+  const moved=await fetchHost(base+'/leaderboard.html?steam=linked',{redirect:'manual',headers:{Host:'localrival-api.onrender.com'}});assert.equal(moved.status,308);assert.equal(moved.headers.get('location'),'https://localrivals.online/leaderboard.html?steam=linked');
+  const pathTrick=await fetchHost(base+'/a/..//evil.test/path',{headers:{Host:'localrival-api.onrender.com'}});assert.equal(new URL(pathTrick.headers.get('location')).origin,'https://localrivals.online');
+  const head=await fetchHost(base+'/',{method:'HEAD',redirect:'manual',headers:{Host:'localrival-api.onrender.com'}});assert.equal(head.status,308);
+  const health=await fetchHost(base+'/health',{redirect:'manual',headers:{Host:'localrival-api.onrender.com'}});assert.equal(health.status,200);assert.equal((await health.json()).database,'connected');
+  const canonical=await fetchHost(base+'/',{redirect:'manual',headers:{Host:'localrivals.online'}});assert.equal(canonical.status,200);assert.equal(canonical.headers.get('location'),null);
+  const forged=await fetchHost(base+'/api/echo',{redirect:'manual',headers:{Host:'evil.test'}});assert.equal(forged.status,200);assert.equal(forged.headers.get('location'),null);
+  assert.equal((await fetchHost(base+'/api/echo',{method:'POST',redirect:'manual',headers:{Host:'localrival-api.onrender.com',Origin:'https://localrival-api.onrender.com'}})).status,403);assert.equal(calls,0);
+  assert.equal((await fetchHost(base+'/api/echo',{method:'POST',headers:{Host:'localrivals.online',Origin:'https://localrivals.online'}})).status,200);assert.equal(calls,1);
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
 });

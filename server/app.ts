@@ -18,6 +18,6 @@ const pool=createPool(process.env.DATABASE_URL);
 await initialize(pool);
 env.DB=databaseAdapter(pool);
 const handlers={'/api/steam/account':account,'/api/steam/start':start,'/api/steam/return':callback,'/api/session/exchange':exchange,'/api/session/logout':logout,'/api/leaderboard':leaderboard,'/api/games/sync':sync,'/api/dota/browser-sync':browserSync,'/api/jobs/dota':nightly};
-const server=createAppServer({origin,handlers,runRequest:(request:Request,action:()=>Promise<Response>)=>requestContext.run(request,action),healthCheck:()=>pool.query('SELECT 1'),staticRoot:resolve('render-dist/public'),trustedProxyHops:process.env.RENDER_EXTERNAL_URL?1:0});
+const server=createAppServer({origin,handlers,runRequest:(request:Request,action:()=>Promise<Response>)=>requestContext.run(request,action),healthCheck:()=>pool.query('SELECT 1'),staticRoot:resolve('render-dist/public'),canonicalAliases:process.env.RENDER_EXTERNAL_URL&&origin!==process.env.RENDER_EXTERNAL_URL?[new URL(process.env.RENDER_EXTERNAL_URL).host]:[],trustedProxyHops:process.env.RENDER_EXTERNAL_URL?1:0});
 server.listen(Number(process.env.PORT||10000),'0.0.0.0',()=>console.log('Local Rival ready'));
 process.on('SIGTERM',()=>{server.close(()=>{pool.end().finally(()=>process.exit(0))})});
