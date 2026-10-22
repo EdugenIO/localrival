@@ -10,12 +10,13 @@ import { SITE_ORIGIN, OPENID_NS, STEAM_ENDPOINT, STATE_COOKIE } from '../lib/ste
 const root=path.resolve(import.meta.dirname,'..');
 async function setup(){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(path.join(root,'drizzle/0000_flashy_alex_power.sql'),'utf8'));
-  const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,rateLimited:false,calls:0};
+  sql.exec(readFileSync(path.join(root,'drizzle/0001_verified_snapshots.sql'),'utf8'));
+  const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,rateLimited:false,emptyDota:false,beforeMatches:null,calls:0};
   const db={prepare(text){let args=[];return {bind(...values){args=values;return this},async all(){return {results:sql.prepare(text).all(...args)}},async first(){return sql.prepare(text).get(...args)||null},async run(){return sql.prepare(text).run(...args)}}},async batch(statements){return Promise.all(statements.map(s=>s.run()))}};
   const context=vm.createContext({console,URL,URLSearchParams,TextEncoder,TextDecoder,Uint8Array,crypto,Request,Response,Headers,AbortSignal,Date,process:{env:{NODE_ENV:'production'}},fetch:async(url,options)=>{
     session.calls++;const target=String(url);
     if(target===STEAM_ENDPOINT){assert.equal(options.body.get('openid.mode'),'check_authentication');return new Response('is_valid:'+session.steamValid+'\n')}
-    if(target.includes('opendota')){if(session.rateLimited)return new Response('',{status:429,headers:{'Retry-After':'300'}});if(session.failDota)return new Response('',{status:503});return Response.json(target.includes('/matches?')?[{match_id:1,player_slot:0,radiant_win:true,kills:1,deaths:0,assists:2}]:{profile:{personaname:'Alice'},rank_tier:43})}
+    if(target.includes('opendota')){if(target.includes('/matches?')&&session.beforeMatches)await session.beforeMatches();if(target.includes('/matches?')&&session.emptyDota)return Response.json([]);if(session.rateLimited)return new Response('',{status:429,headers:{'Retry-After':'300'}});if(session.failDota)return new Response('',{status:503});return Response.json(target.includes('/matches?')?[{match_id:1,player_slot:0,radiant_win:true,kills:1,deaths:0,assists:2}]:{profile:{personaname:'Alice'},rank_tier:43})}
     throw new Error('Unexpected external request');
   }});
   const modules=new Map();
@@ -86,7 +87,7 @@ test('browser profile import limits input size before parsing',async()=>{
 
 test('live ladder requires opt-in, recalculates scores, hides account IDs and isolates membership',async()=>{
  const h=await setup(),a=await start(h),ret=await h.route('steam/return');await ret.GET(callback(a.location,a.state));
- h.sql.prepare('UPDATE steam_links SET dota_data=? WHERE user_id=?').run(JSON.stringify({name:'Synced gamer',matches:[{won:true,abandoned:false},{won:false,abandoned:false},{won:true,abandoned:true}],performance:{points:99999},syncMethod:'browser',fetchedAt:123}),'alice');
+ h.sql.prepare('UPDATE steam_links SET dota_data=?,leaderboard_data=? WHERE user_id=?').run(JSON.stringify({name:'Synced gamer',matches:[{won:true,abandoned:false},{won:false,abandoned:false},{won:true,abandoned:true}],performance:{points:99999},syncMethod:'server',leaderboardEligible:true,fetchedAt:123}),JSON.stringify({name:'Synced gamer',points:4,basePoints:4,performancePoints:0,eligibleMatches:2,wins:1,form:'WLA',fetchedAt:123,provisional:true}),'alice');
  const route=await h.route('leaderboard');const req=body=>new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN,'Content-Type':'application/json'},body:JSON.stringify(body)});
  assert.equal((await(await route.GET()).json()).players.length,0);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'abcd'}))).status,400);
@@ -130,4 +131,60 @@ test('Pages Steam login uses a one-use browser-bound handoff and bearer session'
  assert.equal((await exchange.POST(request(verifier,'https://evil.example'))).status,403);assert.equal((await exchange.POST(request('c'.repeat(64)))).status,401);const issued=await exchange.POST(request());assert.equal(issued.status,200);const data=await issued.json();h.session.authorization='Bearer '+data.token;
  const account=await h.route('steam/account');assert.equal((await(await account.GET()).json()).account.steamId,'76561198000000001');assert.equal((await exchange.POST(request())).status,401);
  const logout=await h.route('session/logout');await logout.POST(new Request(SITE_ORIGIN+'/api/session/logout',{method:'POST',headers:{Origin:'https://edugenio.github.io'}}));assert.equal((await(await account.GET()).json()).account,null);
+});
+
+test('empty manual refresh retains populated verified history and ladder summary',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));const route=await h.route('games/sync');
+ const req=()=>new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}});
+ await route.POST(req());const old=h.sql.prepare('SELECT dota_data,leaderboard_data FROM steam_links').get();h.sql.prepare('UPDATE steam_links SET refresh_after=0').run();h.session.emptyDota=true;
+ const result=await(await route.POST(req())).json();assert.match(result.errors[0],/retained/);assert.deepEqual(h.sql.prepare('SELECT dota_data,leaderboard_data FROM steam_links').get(),old);
+});
+
+test('a slow manual sync cannot overwrite a newer provider snapshot',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));
+ const newer=JSON.stringify({name:'Newer player',fetchedAt:Date.now()+1000,matches:[{won:false}]});
+ h.session.beforeMatches=async()=>{h.sql.prepare('UPDATE steam_links SET dota_data=?').run(newer)};
+ const result=await(await(await h.route('games/sync')).POST(new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}}))).json();
+ assert.equal(result.superseded,true);assert.equal(h.sql.prepare('SELECT dota_data FROM steam_links').get().dota_data,newer);
+});
+
+test('Pages cancelled and expired callbacks always return to the Pages frontend',async()=>{
+ const h=await setup();h.session.user=null;const route=await h.route('steam/start');const response=await route.GET(new Request(SITE_ORIGIN+'/api/steam/start?frontend=pages&challenge='+'b'.repeat(64)));
+ const location=response.headers.get('location');const returnTo=new URL(location).searchParams.get('openid.return_to');const state=new URL(returnTo).searchParams.get('state');
+ const cb=new URL(returnTo);cb.searchParams.set('openid.mode','cancel');
+ const result=await(await h.route('steam/return')).GET(new Request(cb,{headers:{cookie:STATE_COOKIE+'='+state}}));
+ assert.equal(result.headers.get('location'),'https://edugenio.github.io/localrival/?steam=cancelled');
+ const expired=await(await h.route('steam/return')).GET(new Request(cb));assert.equal(expired.headers.get('location'),'https://edugenio.github.io/localrival/?steam=expired');
+});
+
+test('browser imports preserve an existing verified public score',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));
+ await(await h.route('games/sync')).POST(new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}}));
+ const ladder=await h.route('leaderboard');await ladder.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({postcode:'6000'})}));
+ const before=(await(await ladder.GET()).json()).players[0];
+ const matches=Array.from({length:50},(_,i)=>({match_id:1000+i,player_slot:0,radiant_win:true,kills:30,deaths:0,assists:30}));
+ const response=await(await h.route('dota/browser-sync')).POST(new Request(SITE_ORIGIN+'/api/dota/browser-sync',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({steamId:'76561198000000001',accountId:'39734273',profile:{profile:{personaname:'Forged name'}},matches})}));
+ assert.equal(response.status,200);assert.equal((await response.json()).account.dota.performance.points,300);
+ assert.deepEqual((await(await ladder.GET()).json()).players[0],before);
+});
+
+test('public ladder returns bounded ranked pages and server-side location scopes',async()=>{
+ const h=await setup();h.session.user=null;const ladder=await h.route('leaderboard');await ladder.GET();
+ for(let i=0;i<105;i++){
+  const uid='player'+i,id=String(76561198000000000n+BigInt(i));const postcode=i===104?'2000':'6000';
+  h.sql.prepare('INSERT INTO steam_links(user_id,steam_id,linked_at,leaderboard_data)VALUES(?,?,0,?)').run(uid,id,JSON.stringify({name:uid,points:i/10,basePoints:0,performancePoints:i/10,wins:1,eligibleMatches:1,form:'W',fetchedAt:123,provisional:true}));
+  h.sql.prepare('INSERT INTO ladder_members VALUES(?,?,?,?,0)').run(uid,id,uid,postcode);h.sql.prepare('INSERT INTO ladder_places VALUES(?,?)').run(uid,postcode==='6000'?'Perth':'Sydney');
+ }
+ const page=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=country'))).json();assert.equal(page.players.length,100);assert.equal(page.nextOffset,100);assert.equal(page.players[0].points,10.4);
+ const tail=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=country&offset=100'))).json();assert.equal(tail.players.length,5);assert.equal(tail.nextOffset,null);
+ const local=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=postcode&postcode=2000'))).json();assert.equal(local.players.length,1);assert.equal(local.players[0].postcode,'2000');
+ assert.equal((await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=state&postcode=bad'))).status,400);
+});
+
+test('disconnect removes membership, locality and pending handoffs before reconnect',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));await(await h.route('leaderboard')).GET();
+ h.sql.exec("CREATE TABLE pages_handoffs(code_hash TEXT PRIMARY KEY,user_id TEXT,challenge TEXT,expires_at INTEGER);INSERT INTO ladder_members VALUES('alice','76561198000000001','Alice','6000',1);INSERT INTO ladder_places VALUES('alice','Perth');INSERT INTO pages_handoffs VALUES('hash','alice','challenge',9999999999999)");
+ await(await h.route('steam/account')).DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));
+ for(const table of ['ladder_members','ladder_places','pages_handoffs','player_sessions','steam_links','steam_attempts'])assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM '+table).get().n,0);
+ const b=await start(h);await(await h.route('steam/return')).GET(callback(b.location,b.state));assert.equal((await(await(await h.route('leaderboard')).GET()).json()).membership,null);
 });

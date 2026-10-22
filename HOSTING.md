@@ -1,5 +1,7 @@
 # Local Rival hosting
 
+Primary deployment: https://localrival-api.onrender.com/ serves the frontend and API with PostgreSQL. GitHub Pages redirects there. See CLEAN-LAUNCH.md for current release behavior. The sections below describe the retained legacy Sites/Pages architecture.
+
 The current production site is https://local-rival-brett.stony-fir-8901.chatgpt.site/leaderboard and permits anyone with the link.
 
 ## Accounts

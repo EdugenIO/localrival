@@ -1,5 +1,5 @@
 import {dotaMatchesPath} from '../public/opendota-request.mjs';
-const origin=process.env.SITE_ORIGIN||'https://local-rival-brett.stony-fir-8901.chatgpt.site';
+const origin=process.env.SITE_ORIGIN||'https://localrival-api.onrender.com';
 const token=process.env.NIGHTLY_SYNC_TOKEN;if(!token)throw Error('Nightly sync credential is missing');
 async function service(path,body){const r=await fetch(origin+path,{method:body?'POST':'GET',redirect:'error',headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Sync service returned HTTP '+r.status);return r.json()}
 let lastRequest=0;

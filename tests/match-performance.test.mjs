@@ -60,3 +60,10 @@ test('KDA rewards kills and assists on wins and losses with a per-match cap',()=
  const points=matchPerformance([{won:true,kills:1,deaths:3,assists:0},{won:false,kills:0,deaths:4,assists:3}]);
  assert.equal(points.basePoints,4);assert.equal(points.performancePoints,1.1);assert.equal(points.points,5.1);assert.equal(points.version,2);
 });
+
+test('normalization withholds KDA bonus when any KDA field is missing',()=>{
+ for(const key of ['kills','deaths','assists']){
+  const match=fixture(1,23,0);delete match[key];const data=normalizeDota(null,[match]);
+  assert.equal(data.matches[0][key],null);assert.equal(data.performance.performancePoints,0);assert.equal(data.performance.points,3);
+ }
+});

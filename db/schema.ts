@@ -4,6 +4,8 @@ export const steamLinks = sqliteTable("steam_links", {
   steamId: text("steam_id").notNull().unique(),
   linkedAt: integer("linked_at").notNull(),
   dotaData: text("dota_data"),
+  browserData: text("browser_data"),
+  leaderboardData: text("leaderboard_data"),
   csData: text("cs_data"),
   syncedAt: integer("synced_at"),
   refreshAfter: integer("refresh_after").notNull().default(0),

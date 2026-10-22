@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   refresh:
+    if: vars.ENABLE_NIGHTLY_SYNC == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -26,5 +27,5 @@ jobs:
         env:
           FORCE_SYNC: ${{ inputs.force || false }}
           NIGHTLY_SYNC_TOKEN: ${{ secrets.NIGHTLY_SYNC_TOKEN }}
-          SITE_ORIGIN: ${{ vars.API_ORIGIN || 'https://local-rival-brett.stony-fir-8901.chatgpt.site' }}
+          SITE_ORIGIN: ${{ 'https://localrival-api.onrender.com' }}
         run: node scripts/nightly-dota.mjs

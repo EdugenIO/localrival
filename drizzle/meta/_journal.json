@@ -8,6 +8,13 @@
       "when": 1792557065302,
       "tag": "0000_flashy_alex_power",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792627200000,
+      "tag": "0001_verified_snapshots",
+      "breakpoints": true
     }
   ]
 }
