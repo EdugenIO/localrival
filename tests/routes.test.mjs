@@ -5,10 +5,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
+import {PGlite} from '@electric-sql/pglite';
+import {databaseAdapter,initialize} from '../server/postgres.mjs';
 import { SITE_ORIGIN, OPENID_NS, STEAM_ENDPOINT, STATE_COOKIE } from '../lib/steam-openid.mjs';
 
 const root=path.resolve(import.meta.dirname,'..');
-async function setup(){
+async function setup(externalDb){
   const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(path.join(root,'drizzle/0000_flashy_alex_power.sql'),'utf8'));
   sql.exec(readFileSync(path.join(root,'drizzle/0001_verified_snapshots.sql'),'utf8'));
   const session={user:{userId:'alice',email:'alice@example.test'},steamValid:true,failDota:false,rateLimited:false,emptyDota:false,beforeMatches:null,calls:0};
@@ -28,7 +30,7 @@ async function setup(){
     const mod=new vm.SourceTextModule(code,{context,identifier:file});modules.set(file,mod);
     await mod.link(async(spec,ref)=>{
       if(spec==='next/headers')return new vm.SyntheticModule(['headers'],function(){this.setExport('headers',async()=>new Headers({cookie:session.cookie||'',...(session.authorization?{authorization:session.authorization}:{})}))},{context});
-      if(spec==='cloudflare:workers')return new vm.SyntheticModule(['env'],function(){this.setExport('env',{DB:db,NIGHTLY_SYNC_TOKEN:'test-job-token'})},{context});
+      if(spec==='cloudflare:workers')return new vm.SyntheticModule(['env'],function(){this.setExport('env',{DB:externalDb||db,NIGHTLY_SYNC_TOKEN:'test-job-token'})},{context});
       if(spec.endsWith('/chatgpt-auth'))return new vm.SyntheticModule(['getChatGPTUser'],function(){this.setExport('getChatGPTUser',async()=>session.user)},{context});
       let dep=path.resolve(path.dirname(ref.identifier),spec);if(!path.extname(dep))dep+='.ts';return load(dep);
     });return mod;
@@ -187,4 +189,22 @@ test('disconnect removes membership, locality and pending handoffs before reconn
  await(await h.route('steam/account')).DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));
  for(const table of ['ladder_members','ladder_places','pages_handoffs','player_sessions','steam_links','steam_attempts'])assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM '+table).get().n,0);
  const b=await start(h);await(await h.route('steam/return')).GET(callback(b.location,b.state));assert.equal((await(await(await h.route('leaderboard')).GET()).json()).membership,null);
+});
+
+test('the actual leaderboard route executes scoped fractional-score queries on PostgreSQL',async()=>{
+ const pg=new PGlite();
+ const pool={query:async(sql,values)=>!values&&sql.includes(';')?(await pg.exec(sql))[0]:pg.query(sql,values)};
+ try {
+  await initialize(pool);const db=databaseAdapter(pool),h=await setup(db);h.session.user=null;
+  for(const [uid,postcode,locality,points]of [['alice','6000','Perth',4.7],['bob','6000','Perth',4.2],['carol','2000','Sydney',6]]){
+   const id='7656119800000000'+(uid==='alice'?'1':uid==='bob'?'2':'3');
+   await db.prepare('INSERT INTO steam_links(user_id,steam_id,linked_at,leaderboard_data)VALUES(?,?,0,?)').bind(uid,id,JSON.stringify({name:uid,points,basePoints:3,performancePoints:points-3,eligibleMatches:1,wins:1,form:'W',fetchedAt:123,provisional:true})).run();
+   await db.prepare('INSERT INTO ladder_members VALUES(?,?,?,?,0)').bind(uid,id,uid,postcode).run();await db.prepare('INSERT INTO ladder_places VALUES(?,?)').bind(uid,locality).run();
+  }
+  const ladder=await h.route('leaderboard');
+  for(const scope of ['postcode','city','state']){
+   const response=await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope='+scope+'&postcode=6000&locality=Perth'));assert.equal(response.status,200);const data=await response.json();assert.deepEqual(data.players.map(p=>p.points),[4.7,4.2]);
+  }
+  const national=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=country'))).json();assert.equal(national.players[0].name,'carol');
+ }finally{await pg.close()}
 });
