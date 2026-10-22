@@ -9,7 +9,7 @@ const assets=new Map([
 ]);
 const types={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml'};
 
-export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot,canonicalAliases=[],trustedProxyHops=0,abuseGuard=createAbuseGuard({trustedProxyHops})}) {
+export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot,canonicalAliases=/** @type {string[]} */ ([]),trustedProxyHops=0,abuseGuard=createAbuseGuard({trustedProxyHops})}) {
   const server=createServer(async(req,res)=>{
     try {
       const url=new URL(req.url||'/',origin);
