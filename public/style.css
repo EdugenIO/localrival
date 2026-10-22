@@ -5,3 +5,5 @@
 
 .rank-trophy{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:46px;font-family:'DM Sans',sans-serif;font-weight:700;font-size:11px}
 .rank-trophy svg{width:26px;height:26px;flex-shrink:0}.rank-trophy.gold{color:#edc65d}.rank-trophy.silver{color:#c8d2df}.rank-trophy.bronze{color:#d2986a}
+
+.setup-help{max-width:560px}.setup-help .outline{margin:8px 0 0 8px;color:var(--lime)}.info-dialog a{color:var(--lime)}@media(max-width:750px){aside nav #helpNav{display:block;padding:8px;font-size:10px;color:var(--lime);text-align:right}aside nav #infoNav{display:none}}
