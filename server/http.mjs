@@ -2,15 +2,15 @@ import {createServer} from 'node:http';
 import {Readable} from 'node:stream';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-const pagesOrigin='https://edugenio.github.io';
+import {createAbuseGuard} from './abuse-guard.mjs';
 const assets=new Map([
   ['/','leaderboard.html'],['/leaderboard','leaderboard.html'],['/leaderboard.html','leaderboard.html'],
   ...['app.js','steam.js','style.css','steam.css','postcodes.json','dota-hero-names.json','opendota-request.mjs','favicon.svg'].map(name=>['/'+name,name]),
 ]);
 const types={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml'};
 
-export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot}) {
-  return createServer(async(req,res)=>{
+export function createAppServer({origin,handlers,runRequest,healthCheck,staticRoot,trustedProxyHops=0,abuseGuard=createAbuseGuard({trustedProxyHops})}) {
+  const server=createServer(async(req,res)=>{
     try {
       const url=new URL(req.url||'/',origin);
       const headers=new Headers();
@@ -19,13 +19,16 @@ export function createAppServer({origin,handlers,runRequest,healthCheck,staticRo
         if(Array.isArray(value)) for(const v of value) headers.append(key,v);
         else if(value)headers.set(key,value);
       }
-      if(headers.get('origin')===pagesOrigin) {
-        res.setHeader('Access-Control-Allow-Origin',pagesOrigin);res.setHeader('Vary','Origin');
-        res.setHeader('Access-Control-Allow-Methods','GET,POST,DELETE,OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers','Authorization,Content-Type');
-      }
+
       res.setHeader('X-Content-Type-Options','nosniff');
-      if(req.method==='OPTIONS'){res.writeHead(headers.get('origin')===pagesOrigin?204:403);res.end();return}
+      res.setHeader('Referrer-Policy','no-referrer');
+      res.setHeader('X-Frame-Options','DENY');
+      res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');
+      if(new URL(origin).protocol==='https:')res.setHeader('Strict-Transport-Security','max-age=31536000');
+      if(req.method==='OPTIONS'){res.writeHead(headers.get('origin')===new URL(origin).origin?204:403);res.end();return}
+      if(url.pathname.startsWith('/api/')&&['POST','DELETE','PUT','PATCH'].includes(req.method)&&!url.pathname.startsWith('/api/jobs/')&&headers.get('origin')!==new URL(origin).origin){res.writeHead(403,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'Invalid request origin'}));return}
+      const quota=abuseGuard(req,url.pathname);
+      if(!quota.allowed){res.writeHead(429,{'Content-Type':'application/json','Cache-Control':'no-store','Retry-After':String(quota.retryAfter)});res.end(JSON.stringify({error:'Too many requests. Please wait and retry.'}));return}
       if(url.pathname==='/health') {
         await healthCheck();res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
         res.end(JSON.stringify({status:'ok',database:'connected'}));return;
@@ -58,4 +61,6 @@ export function createAppServer({origin,handlers,runRequest,healthCheck,staticRo
       res.end(JSON.stringify({error:'Server unavailable. Please retry; saved data is retained.'}));
     }
   });
+  server.headersTimeout=15000;server.requestTimeout=30000;server.keepAliveTimeout=5000;server.maxRequestsPerSocket=100;
+  return server;
 }

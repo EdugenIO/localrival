@@ -1,4 +1,3 @@
-import {PAGES_ORIGIN} from './pages-auth';
 import {headers} from 'next/headers';
 import {sessionUser} from './steam-session';
 import {matchPerformance,matchPoints} from './match-performance.mjs';
@@ -14,10 +13,9 @@ export function database(): PlayerDatabase {
 export function json(data: unknown, status=200) {return Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}})}
 export async function currentUser() {
   const h=await headers();
-  const authorization=h.get('authorization');
-  return await sessionUser(database(),authorization?.startsWith('Bearer ')?'__Host-lr-session='+authorization.slice(7):h.get('cookie')||'')||await getChatGPTUser();
+  return await sessionUser(database(),h.get('cookie')||'')||await getChatGPTUser();
 }
-export function sameOrigin(request: Request) {return [SITE_ORIGIN,PAGES_ORIGIN].includes(request.headers.get('origin')||'')||(process.env.NODE_ENV!=='production'&&/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(request.headers.get('origin')||''))}
+export function sameOrigin(request: Request) {return request.headers.get('origin')===SITE_ORIGIN||(process.env.NODE_ENV!=='production'&&/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(request.headers.get('origin')||''))}
 export type SteamLink = {user_id:string;steam_id:string;linked_at:number;dota_data:string|null;browser_data:string|null;leaderboard_data:string|null;cs_data:string|null;synced_at:number|null;refresh_after:number};
 export async function getLink(userId: string) {return database().prepare('SELECT * FROM steam_links WHERE user_id=?').bind(userId).first<SteamLink>()}
 export function publicLink(link: SteamLink|null) {

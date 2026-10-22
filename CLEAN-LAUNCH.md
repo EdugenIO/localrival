@@ -29,6 +29,6 @@ Nightly GitHub Actions refresh is gated by repository variable ENABLE_NIGHTLY_SY
 
 ## Security verification
 
-The production npm audit reports zero vulnerabilities after dependency updates. The full development graph still contains transitive advisories (including braces and the Drizzle toolchain); npm does not offer a compatible complete fix for all of them. The Render runtime prunes development packages. Do not expose the development server publicly or downgrade the framework to silence audit output.
+The production npm audit reports zero vulnerabilities after dependency updates. The full development graph retains one unpatched braces advisory across eight development-only package entries; compatible esbuild/fflate fixes have been applied. See SECURITY.md and the expiring CI review policy. The Render runtime prunes development packages. Do not expose the development server publicly or downgrade the framework to silence audit output.
 
 Real Steam sign-in requires the player's interaction with Steam and is not completed by automated tests.

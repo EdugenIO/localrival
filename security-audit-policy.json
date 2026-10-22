@@ -1,0 +1,11 @@
+{
+  "reviewedAt": "2026-10-22",
+  "expiresAt": "2026-11-21",
+  "advisories": {
+    "GHSA-vfj7-8cjw-p6xm": {
+      "package": "braces",
+      "reason": "Latest published braces 3.0.3 is affected. Only development globbing via Next ESLint/Vinext remains; Render prunes development dependencies. Do not downgrade the framework to silence this advisory.",
+      "severity": "high"
+    }
+  }
+}
