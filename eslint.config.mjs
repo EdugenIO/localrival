@@ -10,9 +10,18 @@ const eslintConfig = defineConfig([
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
+    "pages-dist/**",
+    "render-dist/**",
+    "dist/**",
+    "work/**",
+    ".wrangler/**",
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    files: ["public/**/*.{js,mjs}"],
+    rules: {"@next/next/no-location-assign-relative-destination": "off"},
+  },
   {
     files: ["components/ui/**/*.{ts,tsx}", "hooks/use-mobile.ts"],
     rules: {

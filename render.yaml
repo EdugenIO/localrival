@@ -1,4 +1,4 @@
-# Paid resources: do not create until the owner approves the current estimate.
+# Existing paid resources approved by the owner.
 services:
   - type: web
     name: localrival-api
@@ -6,10 +6,10 @@ services:
     plan: starter
     region: singapore
     branch: main
-    buildCommand: npm ci && npm run build:render
+    buildCommand: npm ci && npm run build:render && npm prune --omit=dev
     startCommand: npm run start:render
     healthCheckPath: /health
-    autoDeployTrigger: commit
+    autoDeployTrigger: checksPass
     envVars:
       - key: NODE_VERSION
         value: 22.16.0

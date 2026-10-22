@@ -1,4 +1,6 @@
-# Render migration — prepared, not deployed
+# Render deployment
+
+The paid Starter API/frontend and Basic-256mb database are deployed in LocalRival / Production (Singapore). The owner requested a clean Render database instead of migrating player records. See CLEAN-LAUNCH.md for the active release process; the original migration proposal below is retained as historical reference.
 
 ## Proposed resources (owner approval required)
 - Always-on Node web service in Singapore: Starter (published baseline US$7/month).

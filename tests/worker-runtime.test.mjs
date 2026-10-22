@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {Miniflare} from 'miniflare';
+import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 
 for(const adapter of ['steam','dota','cs'])test(adapter+' uses request options supported by the deployed Worker runtime',async()=>{
   const helper=readFileSync(new URL('../lib/steam-openid.mjs',import.meta.url),'utf8').replace(/^export /gm,'');
   const games=readFileSync(new URL('../lib/game-data.mjs',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
-  const worker=new Miniflare({modules:true,compatibilityDate:'2026-05-15',script:helper+readFileSync(new URL('../lib/match-performance.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+readFileSync(new URL('../public/opendota-request.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+games+`
+  const worker=new Miniflare(convertV4MiniflareOptions({modules:true,compatibilityDate:'2026-05-15',script:helper+readFileSync(new URL('../lib/match-performance.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+readFileSync(new URL('../public/opendota-request.mjs',import.meta.url),'utf8').replace(/^export /gm,'')+games+`
     export default {async fetch(){
       try {
         const provider=async(url,options)=>{
@@ -23,7 +23,7 @@ for(const adapter of ['steam','dota','cs'])test(adapter+' uses request options s
         return new Response('PASS');
       }catch(error){return new Response(error.name+': '+error.message,{status:500})}
     }};
-  `});
+  `}));
   try{const response=await worker.dispatchFetch('http://localhost/');const text=await response.text();assert.equal(response.status,200,text)}finally{await worker.dispose()}
 });
 
