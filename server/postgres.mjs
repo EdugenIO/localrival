@@ -11,6 +11,7 @@ export function createPool(url){if(!url)throw Error('DATABASE_URL is required. A
 export async function initialize(pool){await pool.query(`CREATE TABLE IF NOT EXISTS steam_attempts (state_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL UNIQUE,return_to TEXT NOT NULL,expires_at BIGINT NOT NULL);
 CREATE TABLE IF NOT EXISTS steam_links (user_id TEXT PRIMARY KEY,steam_id TEXT NOT NULL UNIQUE,linked_at BIGINT NOT NULL,dota_data TEXT,cs_data TEXT,synced_at BIGINT,refresh_after BIGINT NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS ladder_members (user_id TEXT PRIMARY KEY,steam_id TEXT NOT NULL UNIQUE,alias TEXT NOT NULL,postcode TEXT NOT NULL,joined_at BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS ladder_privacy (user_id TEXT PRIMARY KEY,show_suburb BIGINT NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS ladder_places (user_id TEXT PRIMARY KEY,locality TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS player_sessions (token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at BIGINT NOT NULL);
 CREATE TABLE IF NOT EXISTS pages_handoffs (code_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,challenge TEXT NOT NULL,expires_at BIGINT NOT NULL);

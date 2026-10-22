@@ -4,7 +4,7 @@ import postcodeData from '../../../public/postcodes.json';
 export const dynamic='force-dynamic';
 const postcodes=postcodeData as Record<string,string[][]>;
 const place=(code:string,locality?:string)=>postcodes[code]?.find(p=>p[0]===locality)||postcodes[code]?.[0];
-type Member = {user_id:string;alias:string;postcode:string;locality:string;leaderboard_data:string|null};
+type Member = {user_id:string;alias:string;postcode:string;locality:string;show_suburb:number|null;leaderboard_data:string|null};
 type Summary = {name:string|null;points:number;basePoints:number;performancePoints:number;eligibleMatches:number;wins:number;form:string;fetchedAt:number;provisional:boolean};
 
 export async function GET(request?:Request) {
@@ -27,17 +27,17 @@ export async function GET(request?:Request) {
       where+=` AND p.locality IN (${names.map(()=>'?').join(',')})`;values.push(...names);
     }
   }
-  const join='FROM ladder_members m JOIN steam_links s ON s.user_id=m.user_id AND s.steam_id=m.steam_id LEFT JOIN ladder_places p ON p.user_id=m.user_id';
-  const records=await db.prepare(`SELECT m.user_id,m.alias,m.postcode,p.locality,s.leaderboard_data ${join} WHERE ${where} ORDER BY json_extract(s.leaderboard_data,'$.points') DESC,1.0*json_extract(s.leaderboard_data,'$.wins')/json_extract(s.leaderboard_data,'$.eligibleMatches') DESC,m.alias,m.user_id LIMIT 101 OFFSET ?`).bind(...values,offset).all<Member>();
+  const join='FROM ladder_members m JOIN steam_links s ON s.user_id=m.user_id AND s.steam_id=m.steam_id LEFT JOIN ladder_places p ON p.user_id=m.user_id LEFT JOIN ladder_privacy privacy ON privacy.user_id=m.user_id';
+  const records=await db.prepare(`SELECT m.user_id,m.alias,m.postcode,p.locality,privacy.show_suburb,s.leaderboard_data ${join} WHERE ${where} ORDER BY json_extract(s.leaderboard_data,'$.points') DESC,1.0*json_extract(s.leaderboard_data,'$.wins')/json_extract(s.leaderboard_data,'$.eligibleMatches') DESC,m.alias,m.user_id LIMIT 101 OFFSET ?`).bind(...values,offset).all<Member>();
   const players=records.results.slice(0,100).flatMap(row=>{
     const location=place(row.postcode,row.locality);if(!location)return [];
     let data:Summary;try{data=JSON.parse(row.leaderboard_data!)}catch{return []}
-    return [{name:data.name||row.alias,postcode:row.postcode,location,points:data.points,basePoints:data.basePoints,performancePoints:data.performancePoints,win:Math.round(data.wins/data.eligibleMatches*100),matches:data.eligibleMatches,form:data.form,fetchedAt:data.fetchedAt,provisional:data.provisional,isYou:row.user_id===user?.userId}];
+    return [{name:data.name||row.alias,locationLabel:row.show_suburb===1?`${location[0]}, ${location[1]}`:`${location[2]}, Australia`,points:data.points,basePoints:data.basePoints,performancePoints:data.performancePoints,win:Math.round(data.wins/data.eligibleMatches*100),matches:data.eligibleMatches,form:data.form,fetchedAt:data.fetchedAt,provisional:data.provisional,isYou:row.user_id===user?.userId}];
   });
-  const member=user?await db.prepare('SELECT m.alias,m.postcode,p.locality FROM ladder_members m LEFT JOIN ladder_places p ON p.user_id=m.user_id WHERE m.user_id=?').bind(user.userId).first<Member>():null;
+  const member=user?await db.prepare('SELECT m.alias,m.postcode,p.locality,privacy.show_suburb FROM ladder_members m LEFT JOIN ladder_places p ON p.user_id=m.user_id LEFT JOIN ladder_privacy privacy ON privacy.user_id=m.user_id WHERE m.user_id=?').bind(user.userId).first<Member>():null;
   const ownLink=user?await getLink(user.userId):null;
   let gamerName=null;try{gamerName=JSON.parse(ownLink?.dota_data||'null')?.name||null}catch{}
-  return json({players,membership:member?{alias:member.alias,postcode:member.postcode,locality:member.locality}:null,gamerName,updatedAt:Date.now(),nextOffset:records.results.length>100?offset+100:null});
+  return json({players,membership:member?{alias:member.alias,postcode:member.postcode,locality:member.locality,showSuburb:member.show_suburb===1}:null,gamerName,updatedAt:Date.now(),nextOffset:records.results.length>100?offset+100:null});
 }
 export async function POST(request:Request) {
   if(!sameOrigin(request))return json({error:'Invalid request origin'},403);
@@ -48,6 +48,7 @@ export async function POST(request:Request) {
   const postcode=typeof body?.postcode==='string'?body.postcode.trim():'';
   const location=place(postcode,body?.locality);
   if(!/^\d{4}$/.test(postcode)||!location||(body?.locality&&!postcodes[postcode].some(p=>p[0]===body.locality)))return json({error:'Enter a valid Australian postcode and choose its suburb/town.'},400);
+  if(body?.showSuburb!==undefined&&typeof body.showSuburb!=='boolean')return json({error:'Invalid suburb visibility preference'},400);
   let alias='';try{alias=JSON.parse(link.dota_data||'null')?.name?.trim()||''}catch{}
   if(!alias)return json({error:'Refresh game data first so we can use your verified gamer name.'},409);
   alias=alias.slice(0,80);
@@ -55,6 +56,7 @@ export async function POST(request:Request) {
   await db.batch([
     db.prepare('INSERT INTO ladder_members (user_id,steam_id,alias,postcode,joined_at) VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET steam_id=excluded.steam_id,alias=excluded.alias,postcode=excluded.postcode').bind(user.userId,link.steam_id,alias,postcode,Date.now()),
     db.prepare('INSERT INTO ladder_places (user_id,locality) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET locality=excluded.locality').bind(user.userId,location[0]),
+    db.prepare('INSERT INTO ladder_privacy (user_id,show_suburb) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET show_suburb=excluded.show_suburb').bind(user.userId,body.showSuburb===true?1:0),
   ]);
   return json({saved:true});
 }
@@ -62,6 +64,6 @@ export async function DELETE(request:Request) {
   if(!sameOrigin(request))return json({error:'Invalid request origin'},403);
   const user=await currentUser();if(!user)return json({error:'Sign in required'},401);
   const db=database();await prepareLadder(db);
-  await db.batch([db.prepare('DELETE FROM ladder_members WHERE user_id=?').bind(user.userId),db.prepare('DELETE FROM ladder_places WHERE user_id=?').bind(user.userId)]);
+  await db.batch([db.prepare('DELETE FROM ladder_privacy WHERE user_id=?').bind(user.userId),db.prepare('DELETE FROM ladder_members WHERE user_id=?').bind(user.userId),db.prepare('DELETE FROM ladder_places WHERE user_id=?').bind(user.userId)]);
   return json({saved:true});
 }

@@ -95,7 +95,7 @@ test('live ladder requires opt-in, recalculates scores, hides account IDs and is
  assert.equal((await route.POST(req({alias:'Alice',postcode:'abcd'}))).status,400);
  assert.equal((await route.POST(req({alias:'Alice',postcode:'6000'}))).status,200);
  let data=await(await route.GET()).json();assert.equal(data.players.length,1);assert.equal(data.players[0].points,4);assert.equal(data.players[0].name,'Synced gamer');assert.equal('unverified' in data.players[0],false);assert.equal(data.membership.postcode,'6000');
- assert.equal((await route.POST(req({alias:'Forged name',postcode:'6027',locality:'Joondalup'}))).status,200);data=await(await route.GET()).json();assert.equal(data.players[0].name,'Synced gamer');assert.equal(data.players[0].postcode,'6027');assert.equal(data.players[0].location[0],'Joondalup');assert.equal(data.players[0].location[3],'Perth');
+ assert.equal((await route.POST(req({alias:'Forged name',postcode:'6027',locality:'Joondalup'}))).status,200);data=await(await route.GET()).json();assert.equal(data.players[0].name,'Synced gamer');assert.equal(data.players[0].locationLabel,'Western Australia, Australia');assert.equal('postcode' in data.players[0],false);assert.equal('location' in data.players[0],false);assert.equal(data.membership.locality,'Joondalup');
  assert.equal((await route.POST(req({postcode:'0800',locality:'Darwin City'}))).status,200);data=await(await route.GET()).json();assert.equal(data.membership.postcode,'0800');
  assert.equal((await route.POST(req({postcode:'6027',locality:'Made up town'}))).status,400);assert.equal(JSON.stringify(data).includes('7656119'),false);assert.equal(JSON.stringify(data).includes('user_id'),false);
  h.session.user={userId:'bob'};assert.equal((await route.POST(req({alias:'Bob',postcode:'6000'}))).status,409);await route.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal((await(await route.GET()).json()).players.length,1);
@@ -174,7 +174,7 @@ test('public ladder returns bounded ranked pages and server-side location scopes
  }
  const page=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=country'))).json();assert.equal(page.players.length,100);assert.equal(page.nextOffset,100);assert.equal(page.players[0].points,10.4);
  const tail=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=country&offset=100'))).json();assert.equal(tail.players.length,5);assert.equal(tail.nextOffset,null);
- const local=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=postcode&postcode=2000'))).json();assert.equal(local.players.length,1);assert.equal(local.players[0].postcode,'2000');
+ const local=await(await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=postcode&postcode=2000'))).json();assert.equal(local.players.length,1);assert.equal(local.players[0].locationLabel,'New South Wales, Australia');assert.equal('postcode' in local.players[0],false);
  assert.equal((await ladder.GET(new Request(SITE_ORIGIN+'/api/leaderboard?scope=state&postcode=bad'))).status,400);
 });
 
@@ -182,7 +182,7 @@ test('disconnect removes membership, locality and pending handoffs before reconn
  const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));await(await h.route('leaderboard')).GET();
  h.sql.exec("CREATE TABLE pages_handoffs(code_hash TEXT PRIMARY KEY,user_id TEXT,challenge TEXT,expires_at INTEGER);INSERT INTO ladder_members VALUES('alice','76561198000000001','Alice','6000',1);INSERT INTO ladder_places VALUES('alice','Perth');INSERT INTO pages_handoffs VALUES('hash','alice','challenge',9999999999999)");
  await(await h.route('steam/account')).DELETE(new Request(SITE_ORIGIN+'/api/steam/account',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));
- for(const table of ['ladder_members','ladder_places','pages_handoffs','player_sessions','steam_links','steam_attempts'])assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM '+table).get().n,0);
+ for(const table of ['ladder_members','ladder_places','ladder_privacy','pages_handoffs','player_sessions','steam_links','steam_attempts'])assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM '+table).get().n,0);
  const b=await start(h);await(await h.route('steam/return')).GET(callback(b.location,b.state));assert.equal((await(await(await h.route('leaderboard')).GET()).json()).membership,null);
 });
 
@@ -218,4 +218,20 @@ test('anonymous login attempts stop at the pending budget and resume after expir
  const insert=h.sql.prepare('INSERT INTO steam_attempts VALUES(?,?,?,?)');for(let i=0;i<1000;i++)insert.run('state'+i,'pending:'+i,'https://unused.test',Date.now()+600000);
  const route=await h.route('steam/start');assert.equal((await route.GET()).status,429);assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_attempts').get().n,1000);
  h.sql.prepare('UPDATE steam_attempts SET expires_at=0').run();assert.equal((await route.GET()).status,303);assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM steam_attempts').get().n,1);
+});
+
+
+test('suburb visibility defaults private, needs a boolean opt-in, and can be revoked',async()=>{
+ const h=await setup(),a=await start(h);await(await h.route('steam/return')).GET(callback(a.location,a.state));
+ await(await h.route('games/sync')).POST(new Request(SITE_ORIGIN+'/api/games/sync',{method:'POST',headers:{Origin:SITE_ORIGIN}}));
+ const ladder=await h.route('leaderboard');const save=body=>ladder.POST(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'POST',headers:{Origin:SITE_ORIGIN},body:JSON.stringify({postcode:'6027',locality:'Joondalup',...body})}));
+ assert.equal((await save({})).status,200);
+ const own=await(await ladder.GET()).json();assert.equal(own.membership.showSuburb,false);assert.equal(own.membership.locality,'Joondalup');
+ const publicRead=async()=>{h.session.user=null;const data=await(await ladder.GET()).json();h.session.user={userId:'alice'};assert.equal(data.membership,null);assert.equal(data.gamerName,null);const player=data.players[0];for(const key of ['postcode','locality','location','user_id','steam_id'])assert.equal(key in player,false);return player};
+ assert.equal((await publicRead()).locationLabel,'Western Australia, Australia');
+ assert.equal((await save({showSuburb:'true'})).status,400);assert.equal((await publicRead()).locationLabel,'Western Australia, Australia');
+ assert.equal((await save({showSuburb:true})).status,200);assert.equal((await publicRead()).locationLabel,'Joondalup, WA');
+ assert.equal((await save({showSuburb:false})).status,200);assert.equal((await publicRead()).locationLabel,'Western Australia, Australia');
+ h.sql.prepare('DELETE FROM ladder_privacy').run();assert.equal((await publicRead()).locationLabel,'Western Australia, Australia');
+ await save({showSuburb:true});await ladder.DELETE(new Request(SITE_ORIGIN+'/api/leaderboard',{method:'DELETE',headers:{Origin:SITE_ORIGIN}}));assert.equal(h.sql.prepare('SELECT COUNT(*) n FROM ladder_privacy').get().n,0);
 });
