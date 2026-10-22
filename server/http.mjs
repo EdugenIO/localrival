@@ -5,7 +5,7 @@ import {resolve} from 'node:path';
 import {createAbuseGuard} from './abuse-guard.mjs';
 const assets=new Map([
   ['/','leaderboard.html'],['/leaderboard','leaderboard.html'],['/leaderboard.html','leaderboard.html'],
-  ...['app.js','steam.js','style.css','steam.css','postcodes.json','dota-hero-names.json','opendota-request.mjs','favicon.svg'].map(name=>['/'+name,name]),
+  ...['app.js','onboarding.js','steam.js','style.css','steam.css','postcodes.json','dota-hero-names.json','opendota-request.mjs','favicon.svg'].map(name=>['/'+name,name]),
 ]);
 const types={html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',mjs:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml'};
 
