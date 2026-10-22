@@ -2,7 +2,7 @@ import pg from 'pg';
 // Millisecond timestamps exceed PostgreSQL INTEGER. Store them as BIGINT and
 // parse them back to safe JS numbers, matching D1's route contract.
 pg.types.setTypeParser(20,value=>{const n=Number(value);if(!Number.isSafeInteger(n))throw Error('Unsafe database integer');return n});
-export function postgresSql(sql){let i=0;return sql.replace(/`/g,'"').replace(/\bINTEGER\b/gi,'BIGINT').replace(/json_extract\((\w+),'\$\.(\w+)'\)/g,(_,column,key)=>`((${column}::jsonb->>'${key}')::${['points','wins','eligibleMatches'].includes(key)?'double precision':'bigint'})`).replace(/\?/g,()=>'$'+ ++i)}
+export function postgresSql(sql){let i=0;return sql.replace(/`/g,'"').replace(/\bINTEGER\b/gi,'BIGINT').replace(/json_extract\((\w+(?:\.\w+)?),'\$\.(\w+)'\)/g,(_,column,key)=>`((${column}::jsonb->>'${key}')::${['points','wins','eligibleMatches'].includes(key)?'double precision':'bigint'})`).replace(/\?/g,()=>'$'+ ++i)}
 export function databaseAdapter(pool){
  const prepare=sql=>{const statement={sql:postgresSql(sql),values:[],bind(...values){return {...statement,values}},async first(){return (await pool.query(this.sql,this.values)).rows[0]||null},async all(){return {results:(await pool.query(this.sql,this.values)).rows}},async run(){const r=await pool.query(this.sql,this.values);return {success:true,changes:r.rowCount}}};return statement};
  return {prepare,async batch(statements){const client=await pool.connect();try{await client.query('BEGIN');const results=[];for(const s of statements)results.push(await client.query(s.sql,s.values));await client.query('COMMIT');return results}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}}};
