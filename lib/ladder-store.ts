@@ -6,6 +6,7 @@ export function prepareLadder(db: PlayerDatabase) {
   if (!pending) {
     pending = (async () => {
       await db.prepare('CREATE TABLE IF NOT EXISTS ladder_members (user_id TEXT PRIMARY KEY, steam_id TEXT NOT NULL UNIQUE, alias TEXT NOT NULL, postcode TEXT NOT NULL, joined_at INTEGER NOT NULL)').run();
+      await db.prepare('CREATE TABLE IF NOT EXISTS ladder_privacy (user_id TEXT PRIMARY KEY, show_suburb INTEGER NOT NULL DEFAULT 0)').run();
       await db.prepare('CREATE TABLE IF NOT EXISTS ladder_places (user_id TEXT PRIMARY KEY, locality TEXT NOT NULL)').run();
     })();
     ready.set(db, pending);
