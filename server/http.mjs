@@ -38,7 +38,7 @@ export function createAppServer({origin,handlers,runRequest,healthCheck,staticRo
         const body=await readFile(resolve(staticRoot,asset));
         res.setHeader('Content-Type',types[asset.split('.').pop()]||'application/octet-stream');
         res.setHeader('Cache-Control','no-cache');
-        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://shared.fastly.steamstatic.com; connect-src 'self' https://api.opendota.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://shared.fastly.steamstatic.com; connect-src 'self' https://api.opendota.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
         res.statusCode=200;res.end(req.method==='HEAD'?undefined:body);return;
       }
       const route=handlers[url.pathname];
