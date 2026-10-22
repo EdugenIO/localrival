@@ -16,12 +16,13 @@
   const heroName=id=>heroNames[id]||'Hero '+(id||'unknown');
   const duration=seconds=>typeof seconds==='number'?Math.floor(Math.round(seconds)/60)+':'+String(Math.round(seconds)%60).padStart(2,'0'):'—';
   function draw(){
+    window.dispatchEvent(new CustomEvent('localrival-account',{detail:{loading:accountLoading,connected:!!account,busy,name:account?.dota?.name||null,error:accountLoading?null:(!account&&error?message:null),syncMessage:error?message:null,refreshAfter:account?.refreshAfter||0}}));
     if(accountLoading){body.replaceChildren();summary.textContent='Loading your saved Steam account…';top.textContent='◉ Loading account…';return;}
     body.replaceChildren();
     summary.replaceChildren();
     const identity=el('span',undefined,'stats-identity',summary);el('span','MY PLAYER STATS','eyebrow',identity);el('strong',account?.dota?.name||(account?'Steam connected':'Connect your Steam account'),'',identity);
     const preview=el('span',undefined,'stats-preview',summary);const performance=account?.dota?.performance;if(performance?.eligibleMatches)el('span',performance.points+' points · '+performance.eligibleMatches+' recent matches','',preview);el('span','Stats & account','stats-prompt',preview);el('span','⌄','stats-chevron',summary);
-    top.textContent=account?'◉ My stats ⌄':'◉ Connect Steam';
+    top.textContent=account?'◉ My stats ⌄':'Connect Steam →';top.onclick=account?()=>{panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'})}:()=>{location.href='/api/steam/start'};document.getElementById('profileNav').onclick=()=>{panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'})};
     const head=el('div',undefined,'steam-head');const intro=el('div',undefined,'',head);el('div','PRIVATE PILOT · REAL ACCOUNTS','eyebrow',intro);el('h2',account?'Your Steam account is connected.':'Bring your game to your home ground.','',intro);
     el('p',account?'Steam account verified. Join your local ladder to share your match score.':'Sign in with your Steam account to collect matches across Turbo, normal and other available modes.','',intro);
     if(!account){const a=el('a',undefined,'steam-signin',head);a.href='/api/steam/start';a.target='_top';const img=document.createElement('img');img.src='https://shared.fastly.steamstatic.com/community_assets/images/steamworks_docs/english/sits_large_border.png';img.alt='Sign in through Steam';img.width=180;img.height=35;a.append(img);el('p','Sign in with Steam to save your account. This device stays signed in for up to 30 days. Local Rival never sees your Steam password.','steam-note');}
@@ -68,6 +69,7 @@
   }
   async function signOut(){if(busy)return;await api('/api/session/logout','POST');if(window.localRivalPages){localStorage.removeItem('localrival-pages-session');location.href='./';}else location.href=location.hostname.endsWith('.chatgpt.site')?'/signout-with-chatgpt?return_to=%2Fleaderboard':'/';}
   async function disconnect(){if(busy)return;if(!window.confirm('Disconnect Steam and remove your stored game data from Local Rival?'))return;busy=true;draw();try{await api('/api/steam/account','DELETE');account=null;message='Steam disconnected. Stored game data has been removed.';error=false}catch(e){message=e.message;error=true}finally{busy=false;draw();window.dispatchEvent(new Event("localrival-sync"))}}
+  window.addEventListener('localrival-refresh',()=>{if(account&&!accountLoading)sync()});
   setInterval(updateRefreshControl,1000);
   draw();Promise.all([api('/api/steam/account'),fetch('/dota-hero-names.json').then(r=>r.json()).catch(()=>({}))]).then(([data,names])=>{accountLoading=false;account=data.account;heroNames=names;draw();if(status==='linked'&&account)sync()}).catch(e=>{accountLoading=false;message=e.message;error=true;draw()});
 })();
